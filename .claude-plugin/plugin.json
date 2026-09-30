@@ -1,14 +1,26 @@
 {
   "name": "aeotester",
-  "displayName": "AEOTester Site Audit",
+  "displayName": "AEOTester: AI SEO Audit and Fix",
   "version": "0.1.0",
-  "description": "Audit and auto-fix your site for AI search visibility. 138-point AEO checklist with fixes applied in your repo.",
+  "description": "AI SEO audit and auto-fix for your website code. Scores AI search visibility (AEO / GEO) with 26 checks, then adds schema markup, llms.txt, AI crawler rules and meta tags, showing a diff before every change.",
   "author": {
     "name": "Ruslan Saifullin",
     "url": "https://x.com/ruslan_dev_ai"
   },
-  "homepage": "https://aeotester.com",
+  "homepage": "https://aeotester.com/?utm_source=claude-plugin&utm_medium=listing",
   "repository": "https://github.com/shapito27/aeotester-site-audit",
   "license": "MIT",
-  "keywords": ["aeo", "seo", "ai-search", "llms-txt", "schema", "structured-data", "site-audit", "geo"]
+  "keywords": [
+    "ai-seo",
+    "seo-audit",
+    "geo",
+    "generative-engine-optimization",
+    "aeo",
+    "answer-engine-optimization",
+    "ai-search",
+    "schema-markup",
+    "structured-data",
+    "llms-txt",
+    "ai-crawlers"
+  ]
 }
