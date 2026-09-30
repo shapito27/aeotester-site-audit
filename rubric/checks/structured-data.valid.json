@@ -10,7 +10,7 @@
     "rendered DOM: every script[type=\"application/ld+json\"] textContent"
   ],
   "scoring": {
-    "summary": "No JSON-LD blocks -> fail, 0. Otherwise start at 5; subtract 0.5 per block that fails JSON.parse; compute validationRate = round(100 * validSchemas / validatableSchemas) over all typed nodes (nested included) whose type has a validator (types without a validator are excluded; if none are validatable the rate is 100). Subtract 2 if rate < 50, 1 if rate < 80, 0.5 if rate < 100. Clamp at 0, round to 1 decimal, then Math.floor for the reported integer score.",
+    "summary": "Page scope. No JSON-LD blocks -> 0. Only template-built blocks that cannot be parsed from source -> 3, inconclusive. Otherwise start at 5; subtract 0.5 per block that fails JSON.parse; compute validationRate = round(100 * valid / validatable) over every typed node (nested included, each node once, typed references to a node defined on the page skipped) whose type has a validator; if no validatable node exists the rate is 100, but if no block parsed at all the rate is 0. Subtract 2 if rate < 50, 1 if rate < 80, 0.5 if rate < 100. Clamp at 0, round to 1 decimal; the engine floors to an integer. If template-built blocks could not be parsed and the score is below 3 it is raised to 3 (inconclusive).",
     "rules": [
       {
         "id": "schema.present",
@@ -20,17 +20,17 @@
       },
       {
         "id": "schema.json_syntax",
-        "condition": "each block where JSON.parse(textContent) throws",
+        "condition": "each block where JSON.parse(textContent) throws (after template-tag substitution; template-built blocks that still fail are not counted, see divergences)",
         "points": "-0.5 each"
       },
       {
         "id": "schema.reference_resolution",
-        "condition": "before validation: build map of @id -> node from top-level data and each @graph item across all blocks; in each @graph item (or top-level node) replace values of properties mainEntity, itemListElement, acceptedAnswer, author, publisher that are exactly {\"@id\": X} (single key) with the mapped node, recursing only through those five properties and arrays",
+        "condition": "validators resolve pure {\"@id\": X} references (mainEntity, acceptedAnswer, author, step, itemListElement, offers) against any node on the page that defines X; a typed node whose @id is defined more fully elsewhere on the page is a reference and is not validated on its own",
         "points": "n/a"
       },
       {
         "id": "schema.node_collection",
-        "condition": "getSchemaTypes: every object with @type anywhere in the block (top level, @graph items, and recursively any nested object or array property except @type/@context/@graph) yields one entry per @type value (array @type yields multiple entries sharing the same data)",
+        "condition": "every object with @type anywhere in a parsed block (top level, @graph items, nested objects and arrays), each object once by identity; an @type array yields one entry per distinct validator (e.g. Organization + LocalBusiness validates once)",
         "points": "n/a"
       },
       {
@@ -48,18 +48,18 @@
         "points": "-0.5"
       },
       {
-        "condition": "validationRate == 100 (including when no node has a validator)",
+        "condition": "validationRate == 100 (including when no node has a validator, as long as at least one block parsed)",
         "points": 0
       },
       {
         "id": "score.final",
         "condition": "score = floor(max(0, round(score*10)/10))",
         "points": "final",
-        "examples": "one parse error only -> 4; rate 80-99 -> 4; rate 50-79 -> 4; rate < 50 -> 3; rate < 50 plus 1 parse error -> 2; 2 parse errors -> 4; 3 parse errors -> 3"
+        "examples": "one parse error only -> 4; rate 80-99 -> 4; rate 50-79 -> 4; rate < 50 -> 3; rate < 50 plus 1 parse error -> 2; 2 parse errors -> 4; 3 parse errors -> 3; a single broken block and nothing else -> 2"
       },
       {
         "id": "schema.validators.note",
-        "condition": "Each rule below is an ISSUE (makes node invalid). Warnings never affect score. Types not listed return valid: null and are excluded from the rate (e.g. WebSite, WebPage, ImageObject, Offer, Question, Answer, HowToStep, ListItem, PostalAddress, SearchAction, Recipe, Event, Review, Dentist and any other LocalBusiness subtype not listed).",
+        "condition": "Each rule below is an ISSUE (makes node invalid). Warnings never affect score. Types not listed return valid: null and are excluded from the rate (e.g. WebSite, WebPage, ImageObject, Offer, Question, Answer, HowToStep, ListItem, PostalAddress, SearchAction, Recipe, Event, Review, Dentist and any other LocalBusiness subtype not listed). Types are matched after stripping a leading http(s)://schema.org/.",
         "points": "n/a"
       },
       {
@@ -81,7 +81,8 @@
         "issues": [
           "missing name",
           "step missing or not an array (stops)",
-          "fewer than 2 steps",
+          "HowToSection without itemListElement steps",
+          "fewer than 2 steps (after expanding HowToSection)",
           "each step @type !== \"HowToStep\"",
           "step missing both text and name"
         ],
@@ -95,9 +96,9 @@
           "missing image",
           "missing description",
           "missing offers",
-          "each offer (array or single) missing both price and priceRange",
+          "each offer (array or single) missing price (0 allowed), priceRange and lowPrice",
           "each offer missing priceCurrency",
-          "aggregateRating present but missing ratingValue"
+          "aggregateRating present but missing ratingValue (0 allowed)"
         ],
         "points": "affects validationRate"
       },
@@ -115,9 +116,9 @@
         "issues": [
           "missing headline",
           "missing author",
-          "author (first element if array) is an object without name",
+          "author (first element if array, after @id resolution) is an object without name",
           "missing datePublished",
-          "datePublished not parseable by new Date() (named ISO 8601 but any Date-parseable string passes)"
+          "datePublished not ISO 8601 (YYYY-MM-DD with optional time and zone)"
         ],
         "points": "affects validationRate"
       },
@@ -155,7 +156,7 @@
           "missing description",
           "missing thumbnailUrl",
           "missing uploadDate",
-          "uploadDate not parseable by new Date()"
+          "uploadDate not ISO 8601"
         ],
         "points": "affects validationRate"
       },
@@ -169,13 +170,13 @@
         "points": "affects validationRate"
       }
     ],
-    "status_mapping": "No JSON-LD -> fail. Else pass if validationRate == 100 and no parse errors; warning if validationRate >= 50; else fail. Status is independent of the numeric score (e.g. a parse error alone gives warning with 4).",
+    "status_mapping": "Engine rule on the integer score: >= 80% (4-5) pass, >= 50% (3) warning, else fail. A single parse error with everything else valid is therefore pass (4), where the extension said warning.",
     "inconclusive": null
   },
   "detect": {
     "method": "script",
     "script": "checks/structured-data/valid.mjs",
-    "source_procedure": "Collect JSON-LD per rendered page. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Look for literal <script type=\"application/ld+json\"> in templates and for code that emits it: Astro <script type=\"application/ld+json\" set:html={JSON.stringify(x)}>, Next.js <script type=\"application/ld+json\" dangerouslySetInnerHTML={{__html: JSON.stringify(x)}}> or libraries like next-seo/schema-dts, Hugo partials (schema.html, {{ jsonify }}), Eleventy JSON-LD includes, Vite SPA index.html. For literal blocks, JSON.parse after stripping template tags only if they are whole-value interpolations (replace with a placeholder string); for code-built objects, evaluate or statically reconstruct the object literal. If a build exists (dist/, public/ after hugo, out/, .next/server/app/*.html, _site/), prefer parsing built HTML. Then apply exactly: resolve @id refs (five properties only), collect every typed node recursively, validate with the listed rules, compute rate, score and status. Count one scripted block per rendered script element."
+    "source_procedure": "Script checks/structured-data/valid.mjs runs on every HTML page the site model loads (built output or static HTML), using lib/jsonld.mjs extractJsonLd(doc, { templates: true }) and lib/schema-validator.mjs (a port of the extension's SchemaValidator) validateNodes. For unbuilt framework sources, build first; runtime-injected JSON-LD is not visible."
   },
   "parity": {
     "level": "partial",
@@ -206,5 +207,57 @@
     "schema.valid.videoobject",
     "schema.valid.dataset"
   ],
-  "extension_source": "src/shared/checks/schema-validation-checker.js"
+  "extension_source": "src/shared/checks/schema-validation-checker.js",
+  "divergences": [
+    {
+      "extension": "If every block fails JSON.parse, validationRate defaults to 100, so only the 0.5-per-block penalty applies (one broken block alone scores 4).",
+      "plugin": "If no block parses, validationRate is 0 (one broken block alone scores 2).",
+      "reason": "Bug: a page whose only structured data is broken passed validation."
+    },
+    {
+      "extension": "After @id resolution a @graph node referenced from author/publisher is collected twice (graph item and nested copy), so it counts double in the rate; @type arrays count once per type.",
+      "plugin": "Each node is validated once (by identity), once per distinct validator.",
+      "reason": "Bug: double counting skewed the rate."
+    },
+    {
+      "extension": "@type must match exactly, so full IRIs like \"https://schema.org/Organization\" fall into Other.",
+      "plugin": "A leading http(s)://schema.org/ is stripped before matching.",
+      "reason": "Full IRIs are valid JSON-LD for the same type."
+    },
+    {
+      "extension": "isValidISO8601 is new Date(x) not NaN, so strings like \"March 3, 2024\" pass as ISO 8601.",
+      "plugin": "datePublished and uploadDate must have the ISO 8601 shape (YYYY-MM-DD with optional time and zone) and parse as a date.",
+      "reason": "The issue text says ISO 8601; the code accepted non-ISO dates (comment/code mismatch)."
+    },
+    {
+      "extension": "HowTo steps must all be @type HowToStep; HowToSection groups make the HowTo invalid.",
+      "plugin": "HowToSection steps are accepted and their itemListElement HowToStep items are validated and counted.",
+      "reason": "HowToSection is valid schema.org and Google-supported; the extension penalized normal markup."
+    },
+    {
+      "extension": "Offer price 0 counts as missing (falsy check); AggregateOffer lowPrice is not accepted; aggregateRating ratingValue 0 is missing.",
+      "plugin": "price 0, lowPrice and ratingValue 0 count as present.",
+      "reason": "Free products and AggregateOffer are valid; falsy checks flagged normal content."
+    },
+    {
+      "extension": "Only the properties mainEntity, itemListElement, acceptedAnswer, author, publisher have pure {\"@id\"} references resolved, against @graph items and top-level objects.",
+      "plugin": "Validators resolve pure {\"@id\"} references (also for HowTo step and offers) against any node on the page that defines that @id.",
+      "reason": "Same intent (Yoast/Rank Math @graph pattern), applied consistently."
+    },
+    {
+      "extension": "A typed reference such as publisher {\"@type\": \"Organization\", \"@id\": \"#org\"} is validated on its own and is invalid for lacking name, even when #org is fully defined on the page.",
+      "plugin": "When the same @id is defined more fully elsewhere on the page, the typed reference is not validated separately; the full definition is. Unresolvable references are still validated (extension behaviour).",
+      "reason": "False positive on normal @graph markup."
+    },
+    {
+      "extension": "Status uses validationRate thresholds (pass only at 100% with no parse errors), independent of the score.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    },
+    {
+      "extension": "Reads the rendered page, where template tags are already filled in.",
+      "plugin": "Reads HTML from the repo. JSON-LD holding template tags ({{ }}, {% %}, <% %>, <? ?>) is parsed with the tags replaced by a placeholder that counts as a present value; the result is marked predicted. A block that still cannot be parsed is never counted as a JSON error: the check reports inconclusive with partial credit and asks for a build or a live check.",
+      "reason": "Source vs live: template values are unknown in the repo, and unrendered syntax is not a real error."
+    }
+  ]
 }

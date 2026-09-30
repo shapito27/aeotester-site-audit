@@ -12,7 +12,7 @@
     "rendered DOM: [typeof], [property], [vocab] elements (RDFa)"
   ],
   "scoring": {
-    "summary": "If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check fails with 0. If there is Microdata/RDFa but zero JSON-LD script tags, it is a fixed warning with 4 points. Otherwise (at least one JSON-LD script tag, even one that fails to parse) points are summed: base 4 if at least one block parses as JSON, FAQ 8 (valid) or 4 (only invalid), each Tier 1 type present 3 (valid) or 1 (only invalid), each Tier 2 type 2 or 0.5, each Tier 3 type 1 or 0. Total = min(15, Math.round(sum)). Validity comes from SchemaValidator.validate() per found entity; a type counts as valid when at least one of its entities validates. Entities are found by walking every parsed block recursively (all nested objects/arrays and @graph), after resolving pure {\"@id\"} references from @graph and top-level @id objects in the properties mainEntity, itemListElement, acceptedAnswer, author, publisher.",
+    "summary": "Page scope, run on every page. If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check scores 0. If no JSON-LD block parses (none present, or all broken) but Microdata/RDFa exists, it is a fixed 4. If every block is broken and there is no Microdata/RDFa, 0. If the only JSON-LD is template-built and unparseable from source, 8 (inconclusive). Otherwise points are summed: base 4 (at least one block parses), FAQ 8 valid / 4 only invalid, each Tier 1 type (HowTo, Product, Organization family) 3 / 1, each Tier 2 type (Article family, VideoObject, Dataset) 2 / 0.5, each Tier 3 type (BreadcrumbList, ItemList, Person) 1 / 0. Total = min(15, Math.round(sum)); if template-built blocks could not be parsed and the total is below 8, it is raised to 8 and marked inconclusive. Every typed node at any depth (including @graph and nested objects) counts; a type is valid when at least one of its nodes validates with lib/schema-validator.mjs. Status comes from the engine (>= 12 pass, >= 8 warning).",
     "rules": [
       {
         "condition": "count(script[type=\"application/ld+json\"]) == 0 AND count([itemscope]) == 0 AND count([typeof]) == 0 AND count([vocab]) == 0",
@@ -21,13 +21,13 @@
         "message": "No structured data found"
       },
       {
-        "condition": "count(script[type=\"application/ld+json\"]) == 0 AND (Microdata found OR RDFa found)",
+        "condition": "no JSON-LD block parses (zero blocks, or every block has invalid JSON) AND (Microdata found OR RDFa found)",
         "status": "warning",
         "points": 4,
         "note": "Fixed 4 regardless of Microdata/RDFa types or validity. Microdata types = itemtype matched by /schema\\.org\\/(\\w+)/ (else raw itemtype). RDFa types = typeof split on whitespace. RDFa 'found' needs [typeof] or [vocab]; [property] alone (e.g. OpenGraph meta property=) does NOT count."
       },
       {
-        "condition": "JSON-LD present: parse each script textContent with JSON.parse; parse failures are kept as invalid blocks (they still make jsonldData.length > 0, so Microdata/RDFa fallback is skipped)",
+        "condition": "JSON-LD present: parse each script textContent with JSON.parse (template tags substituted first, see divergences); parse failures are reported as findings",
         "points": "n/a"
       },
       {
@@ -77,7 +77,7 @@
       {
         "condition": "any other @type (WebPage, WebSite, Question, Answer, ListItem, ImageObject, etc.)",
         "points": 0,
-        "note": "Categorized as Other; contributes nothing. Matching is exact and case-sensitive on the @type string, so 'schema:FAQPage' or full IRIs do not match."
+        "note": "Categorized as Other; contributes nothing. Matching is exact and case-sensitive after stripping a leading http(s)://schema.org/, so 'schema:FAQPage' does not match."
       },
       {
         "condition": "total",
@@ -88,11 +88,11 @@
         "points": "validity"
       },
       {
-        "condition": "validator HowTo: name required; step must be an array with length >= 2; each step @type === 'HowToStep' and has text or name. (HowToSection steps are invalid.)",
+        "condition": "validator HowTo: name required; step must be an array; HowToSection items are expanded into their itemListElement steps; at least 2 steps; each step @type HowToStep and has text or name",
         "points": "validity"
       },
       {
-        "condition": "validator Product: name, image, description required; offers required; each offer needs price or priceRange AND priceCurrency; if aggregateRating present it needs ratingValue",
+        "condition": "validator Product: name, image, description required; offers required; each offer needs price (0 allowed), priceRange or lowPrice AND priceCurrency; if aggregateRating present it needs ratingValue",
         "points": "validity"
       },
       {
@@ -100,7 +100,7 @@
         "points": "validity"
       },
       {
-        "condition": "validator Article types: headline required; author required (if first author is an object it needs name; a string author is only a warning); datePublished required and must parse with new Date()",
+        "condition": "validator Article types: headline required; author required (if first author is an object, after @id resolution, it needs name; a string author is only a warning); datePublished required and must be ISO 8601 (YYYY-MM-DD with optional time)",
         "points": "validity"
       },
       {
@@ -116,21 +116,26 @@
         "points": "validity"
       },
       {
-        "condition": "validator VideoObject: name, description, thumbnailUrl, uploadDate (parseable by new Date()) required",
+        "condition": "validator VideoObject: name, description, thumbnailUrl, uploadDate (ISO 8601) required",
         "points": "validity"
       },
       {
         "condition": "validator Dataset: name and description required",
         "points": "validity"
+      },
+      {
+        "condition": "JSON-LD only template-built and unparseable from source (no parseable block, no broken block, no Microdata/RDFa)",
+        "points": 8,
+        "note": "inconclusive; verify on the built or live page"
       }
     ],
-    "status_mapping": "JSON-LD path: score >= 12 pass, score >= 8 warning, else fail. No structured data: fail 0. Microdata/RDFa only: warning 4.",
+    "status_mapping": "Engine rule on the integer score: >= 80% (12) pass, >= 50% (8) warning, else fail. Same thresholds as the extension.",
     "inconclusive": null
   },
   "detect": {
     "method": "script",
     "script": "checks/structured-data/present.mjs",
-    "source_procedure": "1) Find every <script type=\"application/ld+json\"> in the source that ends up in the page's HTML: static HTML: *.html; Astro: src/layouts/*.astro, src/components/**, src/pages/** (inline <script type=\"application/ld+json\" set:html={JSON.stringify(obj)}> means the object literal in frontmatter must be evaluated or approximated); Hugo: layouts/** (partials like schema.html, head.html), plus Hugo internal templates ({{ template \"_internal/schema.html\" . }} emits <meta itemprop> tags without itemscope, which do not count, and no JSON-LD); Eleventy: _includes/**, src/**, JS data files; Next.js app router: app/**/page.tsx and layout.tsx rendering <script type=\"application/ld+json\" dangerouslySetInnerHTML={{__html: JSON.stringify(x)}}>; pages router: <Head> in pages/** and _document; Vite SPA: index.html. Prefer building the site (npm run build / hugo / eleventy) and scanning output HTML (dist/, public/, _site/, out/, .next/server/app/*.html) when possible, since that is exact. 2) Per page, JSON.parse each block; record parse failures. 3) If no JSON-LD, look for itemscope / typeof / vocab attributes. 4) Resolve @id references (mainEntity, itemListElement, acceptedAnswer, author, publisher) against @graph items and top-level @id objects, walk every object recursively, bucket by exact @type string, run the validator rules listed above, and sum points exactly as in rules. 5) Score per page template; report the representative page (home) plus worst key templates."
+    "source_procedure": "Script checks/structured-data/present.mjs runs on every HTML page the site model loads (built output or static HTML). It uses lib/jsonld.mjs extractJsonLd(doc, { templates: true }) to parse blocks (template tags substituted) and collect every typed node, lib/schema-validator.mjs validateNodes to validate them, and [itemscope] / [typeof] / [vocab] for the Microdata/RDFa fallback. For unbuilt framework sources, build first; JSON-LD injected at runtime (tag managers, client-side React) is not visible."
   },
   "parity": {
     "level": "partial",
@@ -162,5 +167,52 @@
     "schema.itemlist.valid",
     "schema.person.valid"
   ],
-  "extension_source": "src/shared/checks/structured-data-checker.js"
+  "extension_source": "src/shared/checks/structured-data-checker.js",
+  "divergences": [
+    {
+      "extension": "If every JSON-LD block fails to parse, the Microdata/RDFa fallback is skipped and the score is 0 even when Microdata exists.",
+      "plugin": "Broken JSON-LD does not hide Microdata/RDFa: the fixed 4 applies whenever no JSON-LD block parses.",
+      "reason": "Bug: a syntax error in one block wiped out credit for valid Microdata."
+    },
+    {
+      "extension": "@type must match exactly, so full IRIs like \"https://schema.org/Organization\" fall into Other.",
+      "plugin": "A leading http(s)://schema.org/ is stripped before matching.",
+      "reason": "Full IRIs are valid JSON-LD for the same type."
+    },
+    {
+      "extension": "isValidISO8601 is new Date(x) not NaN, so strings like \"March 3, 2024\" pass as ISO 8601.",
+      "plugin": "datePublished and uploadDate must have the ISO 8601 shape (YYYY-MM-DD with optional time and zone) and parse as a date.",
+      "reason": "The issue text says ISO 8601; the code accepted non-ISO dates (comment/code mismatch)."
+    },
+    {
+      "extension": "HowTo steps must all be @type HowToStep; HowToSection groups make the HowTo invalid.",
+      "plugin": "HowToSection steps are accepted and their itemListElement HowToStep items are validated and counted.",
+      "reason": "HowToSection is valid schema.org and Google-supported; the extension penalized normal markup."
+    },
+    {
+      "extension": "Offer price 0 counts as missing (falsy check); AggregateOffer lowPrice is not accepted; aggregateRating ratingValue 0 is missing.",
+      "plugin": "price 0, lowPrice and ratingValue 0 count as present.",
+      "reason": "Free products and AggregateOffer are valid; falsy checks flagged normal content."
+    },
+    {
+      "extension": "Only the properties mainEntity, itemListElement, acceptedAnswer, author, publisher have pure {\"@id\"} references resolved, against @graph items and top-level objects.",
+      "plugin": "Validators resolve pure {\"@id\"} references (also for HowTo step and offers) against any node on the page that defines that @id.",
+      "reason": "Same intent (Yoast/Rank Math @graph pattern), applied consistently."
+    },
+    {
+      "extension": "A typed reference such as publisher {\"@type\": \"Organization\", \"@id\": \"#org\"} is validated on its own and is invalid for lacking name, even when #org is fully defined on the page.",
+      "plugin": "When the same @id is defined more fully elsewhere on the page, the typed reference is not validated separately; the full definition is. Unresolvable references are still validated (extension behaviour).",
+      "reason": "False positive on normal @graph markup."
+    },
+    {
+      "extension": "Reads the rendered page, where template tags are already filled in.",
+      "plugin": "Reads HTML from the repo. JSON-LD holding template tags ({{ }}, {% %}, <% %>, <? ?>) is parsed with the tags replaced by a placeholder that counts as a present value; the result is marked predicted. A block that still cannot be parsed is never counted as a JSON error: the check reports inconclusive with partial credit and asks for a build or a live check.",
+      "reason": "Source vs live: template values are unknown in the repo, and unrendered syntax is not a real error."
+    },
+    {
+      "extension": "Evaluates the single visited URL.",
+      "plugin": "Runs on every page; the engine aggregates per-page scores and groups identical findings.",
+      "reason": "Source audit covers the whole site."
+    }
+  ]
 }

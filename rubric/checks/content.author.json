@@ -16,7 +16,7 @@
     "address elements and [itemtype*=\"PostalAddress\"]"
   ],
   "scoring": {
-    "summary": "Four additive components capped at 5. Author attribution: +2 if an author name is resolved by any detector (priority JSON-LD, microdata, meta, text pattern), else +1 if an author marker exists without a usable name (meta[name=author] present but empty, or microdata author/Person present without name), else 0. Expertise: +1 if any of 41 expertise regexes matches the combined text (author bio text + schema author jobTitle/description/hasCredential/alumniOf/knowsAbout + first 5000 chars of body innerText). Authoritativeness: +1 if an author bio or author link is detected. Trustworthiness: +1 if at least 3 of 5 trust signals are present. Score is an integer 0-5.",
+    "summary": "Page scope. Four additive components capped at 5. Author attribution: +2 if an author name is resolved by any detector (priority JSON-LD, microdata, meta, text pattern), else +1 if an author marker exists without a usable name (meta[name=author] present but empty, microdata author/Person without name, or a JSON-LD Person / article author without a name), else 0. Expertise: +1 if any of 41 expertise regexes matches the combined text (author bio text + schema author jobTitle/description/hasCredential/alumniOf/knowsAbout + first 5000 chars of the body's visible text). Authoritativeness: +1 if an author bio or author link is detected. Trustworthiness: +1 if at least 3 of 5 trust signals are present. Links are matched on the raw href and on the path it resolves to from the page. Score is an integer 0-5.",
     "rules": [
       {
         "id": "author.name",
@@ -25,9 +25,9 @@
       },
       {
         "id": "author.marker_only",
-        "condition": "no authorName but hasAuthorMeta (meta[name=\"author\"] element exists, even with empty content) OR hasMicrodataAuthor (any [itemprop=\"author\"] or [itemtype*=\"schema.org/Person\"] element exists) OR hasSchemaAuthor",
+        "condition": "no authorName but hasAuthorMeta (meta[name=\"author\"] element exists, even with empty content) OR hasMicrodataAuthor (any [itemprop=\"author\"] or [itemtype*=\"schema.org/Person\"] element exists) OR hasSchemaAuthor (a JSON-LD Person, or an Article-like node with an author property, even without a usable name)",
         "points": "+1",
-        "note": "hasSchemaAuthor is only set when a schema name was found, so it cannot reach this branch in practice."
+        "note": "Plugin sets hasSchemaAuthor for nameless schema authors, so e.g. Article.author {\"@id\": \"https://other/#p\"} earns +1."
       },
       {
         "id": "author.none",
@@ -89,12 +89,12 @@
         "condition": "hasAuthorBio OR hasAuthorLink",
         "points": "+1",
         "hasAuthorBio": "true if any of: document has [itemprop=\"author\"]; document has [itemtype*=\"Person\"]; any element matches .author-bio, .about-author, [class*=\"author-bio\"] (selector strings containing author-bio, about-author, itemprop or itemtype); OR authorBioText was captured by author detection (see author_bio_text)",
-        "hasAuthorLink": "true if any element matches a[href*=\"/author/\"], a[href*=\"/about\"], a[href*=\"/contributor/\"], a[href*=\"/writer/\"] (attribute substring match on the raw href)",
+        "hasAuthorLink": "true if any a[href] contains \"/author/\", \"/about\", \"/contributor/\" or \"/writer/\" in its raw href or in the path it resolves to against the page URL (so href=\"about.html\" counts)",
         "not_counted": "Selectors .author-box, [class*=\"author-box\"], .byline, .post-author, .article-author, .contributor, .writer-bio, [rel=\"author\"] set neither flag in detectAuthoritySignals; they only matter through the CSS fallback that can populate authorBioText."
       },
       {
         "id": "eeat.trust",
-        "condition": "trustScore >= 3, where trustScore counts true values among: a[href*=\"/about\"], a[href*=\"/contact\"], a[href*=\"/privacy\"], a[href*=\"/terms\"], (address element OR [itemtype*=\"PostalAddress\"])",
+        "condition": "trustScore >= 3, where trustScore counts true values among: link to \"/about\", \"/contact\", \"/privacy\", \"/terms\" (raw href or resolved path contains it), (address element OR [itemtype*=\"PostalAddress\"])",
         "points": "+1"
       },
       {
@@ -106,11 +106,11 @@
         "id": "reference.author_detection_order",
         "condition": "author_detection_order",
         "value": [
-          "P1 JSON-LD: for each script[type=\"application/ld+json\"], JSON.parse(textContent) (invalid JSON skipped). parseSchemaForAuthor recursively (depth > 5 stops): arrays -> first item with a name wins; node whose @type includes \"Person\" -> name = extractPersonName (name string trimmed, else givenName + \" \" + familyName); node whose @type is one of Article, BlogPosting, NewsArticle, WebPage, Review, HowTo, Recipe with an author property -> articleHasAuthor = true and name from author (string trimmed, first array element, or Person object name); then @graph items; then, if still no name, any nested object property (excluding @type, @context, @graph) is searched for a Person. So a Person nested anywhere (founder, employee, creator, publisher...) counts as the author. Later script blocks with a name overwrite earlier ones. A non-string name property yields null.",
+          "P1 JSON-LD: for each script[type=\"application/ld+json\"], JSON.parse(textContent) (invalid JSON skipped). parseSchemaForAuthor recursively (depth > 5 stops): arrays -> first item with a name wins; node whose @type includes \"Person\" -> name = extractPersonName (name string trimmed, else givenName + \" \" + familyName); node whose @type is one of Article, BlogPosting, NewsArticle, WebPage, Review, HowTo, Recipe with an author property -> articleHasAuthor = true and name from author (string trimmed, first array element, or Person object name); then @graph items; then, if still no name, any nested object property (excluding @type, @context, @graph) is searched for a Person. So a Person nested anywhere (founder, employee, creator, publisher...) counts as the author. Later script blocks with a name overwrite earlier ones. A non-string name property yields null. Plugin: @type full schema.org IRIs are accepted; pure {\"@id\"} author references are resolved against nodes on the page; template tags are substituted before parsing (predicted).",
           "P2 microdata (only if no name yet): each [itemprop=\"author\"]: name = textContent of descendant [itemprop=\"name\"], else element textContent trimmed if 2-99 chars; bio text = textContent substring 0-2000 if length > 20. Then, if still no name, [itemtype*=\"schema.org/Person\"] elements with a descendant [itemprop=\"name\"].",
           "P3 meta (always evaluated for hasAuthorMeta): meta[name=\"author\"] content trimmed; else meta[property=\"article:author\"] content; else meta[name=\"twitter:creator\"] content with leading @ stripped. Used only if no name yet.",
-          "P4 text patterns (if no name or no bio text): for each authorSectionPatterns regex that matches body innerText, find the FIRST element in document order among h2, h3, h4, h5, p, div, section, aside whose textContent matches; container = el.closest(\"section, article, aside, div\") (can be el itself) or parentElement; if container textContent length is 21-2999 chars it becomes authorBioText; name = capture group of nameFromContainer regex on container text. Stops at the first pattern that yields bio text.",
-          "P5 CSS fallback (only if no bio text): first element (in authoritySelectors order) whose trimmed textContent is 21-2999 chars becomes authorBioText."
+          "P4 text patterns (if no name or no bio text): for each authorSectionPatterns regex that matches body visible text (html.mjs innerText approximation), find the FIRST element in document order among h2, h3, h4, h5, p, div, section, aside whose textContent matches; container = el.closest(\"section, article, aside, div\") (can be el itself) or parentElement; if container textContent length is 21-2999 chars it becomes authorBioText; name = capture group of nameFromContainer regex on container text (plugin adds a leading word boundary). Stops at the first pattern that yields bio text.",
+          "P5 CSS fallback (only if no bio text): first element (in authoritySelectors order) whose trimmed textContent is 21-2999 chars becomes authorBioText. Link selectors use the same resolved-path matching as trust links."
         ],
         "points": "n/a"
       },
@@ -124,17 +124,17 @@
           "/written\\s+by/i",
           "/article\\s+by/i",
           "/posted\\s+by/i",
-          "/\\bby\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+/i",
+          "/\\b[Bb]y\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+/",
           "/contributor/i",
           "/bio(?:graphy)?:/i",
-          "/about\\s+[A-Z][a-z]+/i"
+          "/\\b[Aa]bout\\s+[A-Z][a-z]+/"
         ],
         "points": "n/a"
       },
       {
         "id": "reference.name_from_container_regex",
         "condition": "name_from_container_regex",
-        "value": "/(?:[Bb]y|[Ww]ritten\\s+[Bb]y|[Aa]uthor:?)[ ]+([A-Z][a-z]+(?:[ ]+[A-Z][a-z]+){1,3})/",
+        "value": "/\\b(?:[Bb]y|[Ww]ritten\\s+[Bb]y|[Aa]uthor:?)[ ]+([A-Z][a-z]+(?:[ ]+[A-Z][a-z]+){1,3})/",
         "points": "n/a"
       },
       {
@@ -185,13 +185,13 @@
         "points": "n/a"
       }
     ],
-    "status_mapping": "score >= 4 -> pass; score >= 2 -> warning; else fail.",
+    "status_mapping": "Engine rule on the integer score: >= 80% (4-5) pass, >= 50% (3) warning, else fail. The extension called 2 a warning; the plugin calls it fail.",
     "inconclusive": null
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/content/author.mjs",
-    "source_procedure": "1. Pick the page templates to evaluate. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Evaluate the layout chain that renders a representative content page (blog post/article) and the home page; report per-page if they differ. 2. JSON-LD: collect <script type=\"application/ld+json\"> bodies from templates, plus JSON-LD built in code (Astro set:html={JSON.stringify(obj)}, Next.js <script dangerouslySetInnerHTML> or JSON-LD components, Hugo partials, Eleventy data). Apply parseSchemaForAuthor as described: any Person anywhere (depth <= 5) or an author on Article/BlogPosting/NewsArticle/WebPage/Review/HowTo/Recipe gives a name. If the name is a template variable (e.g. {{ .Params.author }}, {post.data.author}), resolve it from frontmatter/config/site data; if unresolvable, treat as name present but flag. 3. Microdata: grep templates for itemprop=\"author\" and itemtype containing schema.org/Person, and a nested itemprop=\"name\". 4. Meta: grep for <meta name=\"author\">, <meta property=\"article:author\">, <meta name=\"twitter:creator\"> in head templates; Next.js app router: metadata.authors / metadata.twitter.creator in layout/page exports (Next emits meta name=\"author\" from authors); Astro/Hugo/Eleventy SEO components/partials. 5. Trust links: grep all templates (header/footer/nav partials especially) for href values containing \"/about\", \"/contact\", \"/privacy\", \"/terms\" (substring, raw attribute), and for <address> or itemtype containing PostalAddress. Count distinct kinds; >= 3 earns the point. Also check nav data files (e.g. Hugo menus in config, Astro/Next nav arrays) since links are often data-driven. 6. Authority: +1 if trust scan found any href containing \"/about\", \"/author/\", \"/contributor/\" or \"/writer/\", or any class containing author-bio / about-author, or itemprop=\"author\" / itemtype containing Person, or a byline/author-box element with 21-2999 chars of text. 7. Expertise: run the 41 expertisePatterns against the concatenation of author bio text, schema Person jobTitle/description/hasCredential/alumniOf/knowsAbout, and the first ~5000 characters of the page visible text (approximate from the template plus the content file markdown, stripping tags). Note that very common words match (see open_questions), so on any page with meaningful English copy this is nearly always true. 8. Sum as in scoring.rules, cap at 5, map status.",
+    "source_procedure": "Script checks/content/author.mjs runs on every HTML page the site model loads (built output or static HTML) and applies the extension's detectors in order: JSON-LD (lib/jsonld.mjs, template tags substituted), microdata, meta tags, text patterns on the body's visible text (html.mjs innerText approximation), CSS selector fallback; then expertise regexes, authority (bio/author link) and trust (about/contact/privacy/terms links, address). For unbuilt framework sources, build first. Visible text is approximated from static HTML, so client-rendered bylines are not seen.",
     "llm_criteria": "Only the text-pattern name extraction (P4) and the expertise scan depend on rendered visible text. The model should: (a) decide whether visible body copy on a content page contains a byline or author section matching the authorSectionPatterns, and extract \"By First Last\" style names as the regex would (capitalized 2-4 word sequence after By / Written by / Author:, note the regex has no word boundary so \"Nearby Coffee Shop\" yields \"Coffee Shop\"); (b) decide whether the first ~5000 visible characters contain any expertise pattern term (degrees, titles like Founder/Director/Editor/Author/Writer, certifications, Certified/Licensed/Registered, Expert/Specialist/Consultant/Professional, \"N years of experience\", \"Member of\", \"Featured in\", etc.). Mirror the regexes, do not apply a stricter human judgement of genuine expertise."
   },
   "parity": {
@@ -223,5 +223,47 @@
     "eeat.trust.terms",
     "eeat.trust.address"
   ],
-  "extension_source": "src/shared/checks/author-signals-checker.js"
+  "extension_source": "src/shared/checks/author-signals-checker.js",
+  "divergences": [
+    {
+      "extension": "hasSchemaAuthor is only set when a schema author name is found, so a JSON-LD author without a name (e.g. Article.author {\"@id\": ...} only) never earns the +1 marker point.",
+      "plugin": "A JSON-LD Person or an Article-like author property without a usable name sets hasSchemaAuthor and earns +1.",
+      "reason": "Bug: the marker branch was unreachable through JSON-LD."
+    },
+    {
+      "extension": "The authorSectionPatterns /\\bby\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+/i and /about\\s+[A-Z][a-z]+/i carry the i flag, so \"by the way\" and \"about this\" match, despite comments saying they need capitalized names.",
+      "plugin": "Only the leading word is case-insensitive ([Bb]y, [Aa]bout); the name part must be capitalized.",
+      "reason": "Comment/code mismatch; false positives on ordinary prose."
+    },
+    {
+      "extension": "The byline name regex has no leading word boundary, so \"Nearby Coffee Shop\" yields the author name \"Coffee Shop\".",
+      "plugin": "A leading \\b is required.",
+      "reason": "False positive on normal content."
+    },
+    {
+      "extension": "Trust and author links use a[href*=\"/about\"] etc. on the raw attribute, so relative links like href=\"about.html\" or \"contact.html\" do not count.",
+      "plugin": "The href is also resolved against the page URL and its path is matched.",
+      "reason": "Relative links are equally valid; the extension missed them."
+    },
+    {
+      "extension": "Pure {\"@id\"} author references are not resolved; @type must match exactly.",
+      "plugin": "Author references are resolved against nodes on the page; a leading http(s)://schema.org/ in @type is stripped.",
+      "reason": "Same entity, different JSON-LD spelling (Yoast/Rank Math @graph pattern)."
+    },
+    {
+      "extension": "Reads the rendered page, where template tags are filled in.",
+      "plugin": "JSON-LD template tags are replaced by a placeholder; a schema author name that comes from a template is marked predicted.",
+      "reason": "Source vs live: template values are unknown in the repo."
+    },
+    {
+      "extension": "Visible text is document.body.innerText of the rendered page.",
+      "plugin": "Visible text is html.mjs innerText (static HTML without script/style/hidden elements).",
+      "reason": "Source vs live: no browser rendering."
+    },
+    {
+      "extension": "Status: >= 4 pass, >= 2 warning.",
+      "plugin": "Status is derived from the integer score by the shared 80% / 50% rule (2 is fail).",
+      "reason": "Consistent status rule across checks."
+    }
+  ]
 }

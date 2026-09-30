@@ -12,7 +12,7 @@
     "time[datetime] elements"
   ],
   "scoring": {
-    "summary": "Publish date found if article:published_time has content or any JSON-LD block contains a truthy datePublished at any nesting depth. Modified date found if article:modified_time has content, or any JSON-LD block contains a truthy dateModified at any depth, or any <time datetime> element exists. Neither => fail 0. Otherwise start at 5 and subtract 2 for whichever is missing. Result: both => 5 pass; one only => 3 warning.",
+    "summary": "Page scope. Publish date found if article:published_time has content, any JSON-LD block contains a truthy datePublished at any depth, or a <time datetime> is labelled as the publish date (itemprop=\"datePublished\", or class published/pubdate/post-date/entry-date on it or its parent). Modified date found if article:modified_time has content, any JSON-LD block contains a truthy dateModified at any depth, or any other <time datetime> element exists. Neither => 0. Otherwise start at 5 and subtract 2 for whichever is missing. Result: both => 5; one only => 3.",
     "rules": [
       {
         "condition": "hasPublishDate: meta[property=\"article:published_time\"] content truthy",
@@ -23,15 +23,15 @@
         "points": "n/a"
       },
       {
-        "condition": "JSON-LD: each script[type=\"application/ld+json\"] JSON.parse'd (invalid JSON skipped silently); findPropertyInObject recursively searches objects and arrays for own property 'datePublished' / 'dateModified' with truthy value",
+        "condition": "JSON-LD: each script[type=\"application/ld+json\"] parsed (template tags substituted first; invalid JSON skipped silently); recursive search of objects and arrays for own property 'datePublished' / 'dateModified' with truthy value. A template-built block that still cannot be parsed counts when its raw text contains the property name (predicted).",
         "points": "n/a"
       },
       {
-        "condition": "hasTimeElements: document.querySelectorAll('time[datetime]').length > 0 (counts as a MODIFIED signal)",
+        "condition": "time[datetime] elements: one labelled as the publish date (itemprop=\"datePublished\" or class published/pubdate/post-date/entry-date on it or its parent) is a PUBLISH signal; every other one is a MODIFIED signal",
         "points": "n/a"
       },
       {
-        "condition": "foundPublish = hasPublishDate || hasJsonLdPublish; foundModified = hasModifiedDate || hasJsonLdModified || hasTimeElements",
+        "condition": "foundPublish = hasPublishDate || hasJsonLdPublish || labelled publish <time>; foundModified = hasModifiedDate || hasJsonLdModified || other <time datetime>",
         "points": "n/a"
       },
       {
@@ -52,13 +52,13 @@
         "points": "n/a"
       }
     ],
-    "status_mapping": ">= 4 pass, >= 2 warning, else fail. Reachable: 5 pass, 3 warning, 0 fail.",
+    "status_mapping": "Engine rule on the integer score: 5 pass, 3 warning (60%), 0 fail. Same outcome as the extension.",
     "inconclusive": null
   },
   "detect": {
     "method": "script",
     "script": "checks/content/freshness.mjs",
-    "source_procedure": "Per page, look for date signals in the rendered output. Static HTML: meta/JSON-LD/<time datetime> in *.html. Astro: layouts and page components (frontmatter pubDate/updatedDate often rendered via <time datetime={...}> or JSON-LD in BaseHead.astro); content collections schema in src/content/config.ts. Hugo: layouts/partials/head*.html, _internal/opengraph.html (emits article:published_time and article:modified_time for pages with .Date/.Lastmod when page is a regular page in a section), _internal/schema.html, single.html <time datetime=\"{{ .Date.Format ... }}\">; front matter date/lastmod. Eleventy: layouts in _includes/** using page.date / front matter. Next.js: metadata.openGraph {type: 'article', publishedTime, modifiedTime} (emits article:published_time/modified_time), JSON-LD <script> in page.tsx, <time dateTime> in components. Vite SPA: components. Determine which signals will be present on the audited page type (e.g. blog posts vs home page) and apply the rules."
+    "source_procedure": "Script checks/content/freshness.mjs runs on every HTML page the site model loads (built output or static HTML): meta article:published_time / article:modified_time, JSON-LD via lib/jsonld.mjs (template tags substituted), and time[datetime] elements. For unbuilt framework sources, build first; dates injected at runtime are not visible."
   },
   "parity": {
     "level": "partial",
@@ -81,5 +81,17 @@
     "freshness.modified.jsonld",
     "freshness.modified.time_element"
   ],
-  "extension_source": "src/shared/checks/content-freshness-checker.js"
+  "extension_source": "src/shared/checks/content-freshness-checker.js",
+  "divergences": [
+    {
+      "extension": "Any <time datetime> counts as a modified-date signal, so a page whose only date is a publish <time> reports 'modified found, publish missing'.",
+      "plugin": "A <time> explicitly labelled as the publish date (itemprop=\"datePublished\" or a published/pubdate/post-date/entry-date class on it or its parent) counts as the publish date; unlabelled ones keep the extension behaviour.",
+      "reason": "Bug: the finding named the wrong missing date. The score is unchanged in that case (3)."
+    },
+    {
+      "extension": "Reads the rendered page, where template tags are filled in; invalid JSON-LD is skipped.",
+      "plugin": "JSON-LD template tags are substituted before parsing; a template-built block that still cannot be parsed counts a date property present in its raw text. Such results are marked predicted.",
+      "reason": "Source vs live: never score a site down for a template value the repo cannot show."
+    }
+  ]
 }

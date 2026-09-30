@@ -1,21 +1,33 @@
 // JSON-LD extraction shared by the structured data, schema validation,
 // author, freshness and content quality checks.
 
-// Returns { blocks: [{ el, line, data, error }], nodes: [{ node, types, line, path }] }
+// Returns { blocks: [{ el, line, data, error, templated }], nodes: [{ node, types, line, path }] }
 // nodes includes every object with an @type, at any depth, including @graph
 // members. Each node appears once (by identity), even when referenced twice.
-export function extractJsonLd(doc) {
+// With { templates: true }, a block that holds
+// template tags ({{ }}, {% %}, <% %>, <? ?>) is parsed with the tags replaced
+// by TEMPLATE_PLACEHOLDER; templated is true for such blocks (data is null
+// when it does not parse either way).
+export function extractJsonLd(doc, { templates = false } = {}) {
   const blocks = []
   for (const el of doc.querySelectorAll('script[type="application/ld+json" i]')) {
     const text = el.textContent.trim()
     if (!text) {
-      blocks.push({ el, line: el.line, data: null, error: 'empty block' })
+      blocks.push({ el, line: el.line, data: null, error: 'empty block', templated: false })
       continue
     }
+    if (templates && hasTemplateSyntax(text)) {
+      try {
+        blocks.push({ el, line: el.line, data: JSON.parse(substituteTemplates(text)), error: null, templated: true })
+        continue
+      } catch {
+        // fall through to a plain parse
+      }
+    }
     try {
-      blocks.push({ el, line: el.line, data: JSON.parse(text), error: null })
+      blocks.push({ el, line: el.line, data: JSON.parse(text), error: null, templated: false })
     } catch (err) {
-      blocks.push({ el, line: el.line, data: null, error: err.message })
+      blocks.push({ el, line: el.line, data: null, error: err.message, templated: templates && hasTemplateSyntax(text) })
     }
   }
 
@@ -59,4 +71,39 @@ export function resolver(nodes) {
     }
     return value
   }
+}
+
+// Template tags left in unbuilt source (Jekyll/Liquid, Nunjucks, ERB, PHP)
+export const TEMPLATE_PLACEHOLDER = '__template__'
+const TEMPLATE_TAG = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|<%[\s\S]*?%>|<\?[\s\S]*?\?>/y
+
+export function hasTemplateSyntax(text) {
+  return /\{\{|\{%|<%|<\?/.test(text)
+}
+
+// Output tags become the placeholder (quoted when outside a JSON string);
+// control tags ({% if %}, <% code %>) are dropped.
+export function substituteTemplates(text) {
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < text.length;) {
+    TEMPLATE_TAG.lastIndex = i
+    const m = TEMPLATE_TAG.exec(text)
+    if (m) {
+      const control = m[0].startsWith('{%') || (m[0].startsWith('<%') && !m[0].startsWith('<%='))
+      if (!control) out += inStr ? TEMPLATE_PLACEHOLDER : `"${TEMPLATE_PLACEHOLDER}"`
+      i += m[0].length
+      continue
+    }
+    const c = text[i]
+    if (inStr && c === '\\') {
+      out += c + (text[i + 1] ?? '')
+      i += 2
+      continue
+    }
+    if (c === '"') inStr = !inStr
+    out += c
+    i++
+  }
+  return out
 }
