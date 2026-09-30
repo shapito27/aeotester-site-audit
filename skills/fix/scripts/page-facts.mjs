@@ -112,10 +112,16 @@ export function guessBrand(facts, baseUrl = null) {
   return home?.title || null
 }
 
+// Site logo files to look for, most specific first: logo.* in the usual
+// folders, then the touch icon (a square brand mark on most sites)
+const LOGO_CANDIDATES = ['', 'img/', 'images/', 'assets/']
+  .flatMap(dir => ['svg', 'png', 'jpg', 'webp'].map(ext => `${dir}logo.${ext}`))
+  .concat(['apple-touch-icon'].map(base => `${base}.png`))
+
 function findLogo(site) {
   const roots = [site.servedRoot, site.sourcePublicDir].filter(Boolean)
   for (const r of roots) {
-    for (const name of ['logo.svg', 'logo.png', 'logo.jpg', 'logo.webp', 'img/logo.svg', 'img/logo.png', 'images/logo.svg', 'images/logo.png', 'assets/logo.svg', 'assets/logo.png', 'apple-touch-icon.png', 'icon.png', 'favicon.svg']) {
+    for (const name of LOGO_CANDIDATES) {
       if (existsSync(join(site.root, r, name))) return { path: toPosix(posix.join(toPosix(r), name)), urlPath: '/' + name }
     }
   }
