@@ -57,4 +57,4 @@ Allow: /
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only ai-access.content-signals`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only ai-access.content-signals`

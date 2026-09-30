@@ -2,7 +2,7 @@
 name: audit
 description: AI SEO audit of the website in the current repo - the AEOTester checklist for answer engine optimization (AEO) and generative engine optimization (GEO), 26 checks and 138 points - with a scored report in aeotester-report.md. Use when the user asks to audit a site for AI search visibility, AI SEO, AEO, GEO, llms.txt, schema markup, AI crawler access or agent readiness.
 argument-hint: "[site-root] [--max-pages N] [--base-url https://example.com]"
-allowed-tools: Read, Glob, Grep, Bash(node:*)
+allowed-tools: Read, Glob, Grep, Bash(node --version), Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs:*)
 ---
 
 # AEOTester audit
@@ -22,7 +22,7 @@ Audits the site in this repo against the AEOTester rubric and writes `aeotester-
 2. **Run the audit.** Pass the user's arguments through (`$ARGUMENTS`, default `.`):
 
    ```bash
-   node "${CLAUDE_SKILL_DIR}/scripts/audit.mjs" $ARGUMENTS
+   node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs $ARGUMENTS
    ```
 
    It detects the stack, finds the pages, runs every check, writes `aeotester-report.md` and prints a short summary.

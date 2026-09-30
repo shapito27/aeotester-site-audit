@@ -64,4 +64,4 @@ Allow: /
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only ai-access.bot-crawlability`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only ai-access.bot-crawlability`

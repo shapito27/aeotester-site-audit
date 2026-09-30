@@ -54,4 +54,4 @@ X-Robots-Tag rules: `_headers`, `netlify.toml` `[[headers]]`, `vercel.json` `hea
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only crawlability.indexability`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only crawlability.indexability`

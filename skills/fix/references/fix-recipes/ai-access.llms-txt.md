@@ -29,7 +29,7 @@ If a generator already exists, fix it instead of adding a static file.
 
 ## Steps
 
-1. Run the draft generator: `node "${CLAUDE_PLUGIN_ROOT}/skills/fix/scripts/generate-llms-txt.mjs" [root]`. It prints a draft built from the page facts: brand H1 (`site.brand`), `> summary` from the homepage meta description, and `## Section` lists of `- [Title](url): description`.
+1. Run the draft generator: `node ${CLAUDE_PLUGIN_ROOT}/skills/fix/scripts/generate-llms-txt.mjs [root]`. It prints a draft built from the page facts: brand H1 (`site.brand`), `> summary` from the homepage meta description, and `## Section` lists of `- [Title](url): description`.
 2. Review the draft: drop thin, duplicate, legal, tag and pagination pages; keep the pages an assistant should read first. Check every URL is absolute on the production host (`site.baseUrl`) and every description comes from the page.
 3. If `site.baseUrl` is unknown, ask the user for the production domain before writing links.
 4. Write the reviewed file to the location in the table. Show the diff first.
@@ -61,4 +61,4 @@ If a generator already exists, fix it instead of adding a static file.
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only ai-access.llms-txt`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only ai-access.llms-txt`

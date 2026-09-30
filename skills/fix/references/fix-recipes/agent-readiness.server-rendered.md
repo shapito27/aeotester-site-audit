@@ -27,7 +27,7 @@ For generated stacks, fix the source that produced the built page, never the bui
 
 ## Steps
 
-1. From `page-facts.mjs`, read each flagged page's `wordCount`, `title`, `h1` and `file`, and open the built HTML to see what an agent receives (`curl -s <url>` on a live site shows the same).
+1. From `page-facts.mjs`, read each flagged page's `wordCount`, `title`, `h1` and `file`, and open the built HTML to see what an agent receives.
 2. Find why the text is missing: an empty mount div, a client-only component, or a runtime `fetch`. Name the exact component or script.
 3. Quick wins Claude can apply (auto part): a static `<title>` and meta description in the head; an `<h1>` and short intro paragraph in the static shell when the page has fixed wording; removing a `client:only` or `ssr: false` from a content component that has no browser-only code.
 4. Architectural changes (assisted part): adding SSR, SSG or a prerender step, or restructuring data fetching. Outline the plan (packages, config changes, files touched) and wait for the user's approval before editing.
@@ -50,4 +50,4 @@ For generated stacks, fix the source that produced the built page, never the bui
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only agent-readiness.server-rendered`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only agent-readiness.server-rendered`

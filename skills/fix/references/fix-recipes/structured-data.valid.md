@@ -54,4 +54,4 @@ For generated stacks, fix the template that produced the block, never the built 
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only structured-data.valid`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only structured-data.valid`

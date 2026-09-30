@@ -50,4 +50,4 @@ Forcing HTTPS: Netlify `_redirects` (`http://example.com/* https://example.com/:
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only crawlability.https`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only crawlability.https`

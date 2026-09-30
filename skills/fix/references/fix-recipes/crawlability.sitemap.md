@@ -53,4 +53,4 @@ Sitemap: https://example.com/sitemap.xml
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only crawlability.sitemap`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only crawlability.sitemap`
