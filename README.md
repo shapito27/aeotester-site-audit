@@ -1,8 +1,13 @@
 # AEOTester Site Audit
 
-Audit and auto-fix your website for AI search (AEO) - right inside Claude Code. 26 checks, 138 points: schema markup, llms.txt, AI crawler rules.
+Audit and auto-fix your website for AI search (AEO) - right inside Claude Code. 26 checks, 138 points: schema markup, llms.txt, AI crawler rules, meta tags, headings and agent readiness.
 
-> Status: early development (v0.1 scaffold). The commands exist but do not do anything useful yet.
+The [AEOTester Chrome extension](https://aeotester.com/?utm_source=github&utm_medium=plugin) tells you what is wrong with a live page. This plugin works in your codebase, so it can also fix it:
+
+```
+/aeotester:audit   ->  score + report with file:line for every issue
+/aeotester:fix     ->  diffs for the fixes, applied after you say yes, then a re-audit
+```
 
 ## Install
 
@@ -11,37 +16,79 @@ claude plugin marketplace add shapito27/aeotester-site-audit
 claude plugin install aeotester@aeotester
 ```
 
-Or from inside a Claude Code session:
+Or inside a Claude Code session:
 
 ```
 /plugin marketplace add shapito27/aeotester-site-audit
 /plugin install aeotester@aeotester
 ```
 
+Requires Node 18 or newer (the checks are plain Node scripts with no dependencies).
+
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `/aeotester:audit` | Runs the 138-point AEO checklist on your site source and writes `aeotester-report.md` |
-| `/aeotester:fix` | Applies fixes in your repo (schema, llms.txt, headings, robots.txt, meta). Always shows a diff and asks first |
+| `/aeotester:audit [site-root]` | Detects your stack, audits the pages and root files, writes `aeotester-report.md`, and summarizes the biggest point losses |
+| `/aeotester:fix [check-id ...]` | Fixes the auto-fixable issues in your source files. Shows a diff per file and asks before writing. Never commits. Re-audits at the end |
+| `/aeotester:fix --yes` | Same, but you approve up front: diffs are still printed before anything is written |
 
-## Local development
+## Example
 
-```bash
-claude --plugin-dir ./aeotester-site-audit
-claude plugin validate --strict ./aeotester-site-audit
-```
+On the sample site in [`tests/fixtures/sample-site`](tests/fixtures/sample-site) (three static pages with typical problems):
 
-Inside a session, `/reload-plugins` picks up edits.
+| | Score |
+|---|---|
+| Before | **71 / 132** (54%, Not AEO Ready) |
+| After `/aeotester:fix --yes` | **100 / 132** (76%, Needs Work) |
+
+The fix run added Organization and WebSite JSON-LD, an llms.txt, titles, descriptions, canonical, Open Graph and Twitter tags, `lang` and viewport, `<main>` and `<nav>`, and repaired the heading hierarchy. It left the robots.txt policy (which AI bots to allow, Content-Signal values) for the owner to decide, and listed the items that need real content: author credentials, publish dates, alt text. Scores can differ between runs because titles and descriptions are written by Claude.
+
+## What it checks
+
+| Category | Points | Examples |
+|---|---:|---|
+| AI crawler access | 21 | robots.txt rules for GPTBot, ClaudeBot, PerplexityBot and 120+ other AI bots, llms.txt, Content Signals |
+| Crawlability and indexing | 18 | canonical, noindex, soft 404s, sitemap, HTTPS, real 404s, X-Robots-Tag |
+| Structured data | 20 | JSON-LD presence and Schema.org validation (Organization, Article, FAQPage, Product, BreadcrumbList...) |
+| Meta and social tags | 22 | title, description, Open Graph, Twitter cards, `lang`, viewport |
+| Content structure and quality | 36 | heading hierarchy, content depth, freshness dates, author signals, alt text, internal links, landmarks |
+| Agent readiness | 21 | server-rendered content, Markdown for agents, agent-usable controls, `/.well-known/` agent protocols (only scored when the site has an API) |
+
+The full rubric, with the exact scoring rules for every check, is in [`skills/audit/references/rubric.json`](skills/audit/references/rubric.json). It is the same checklist the AEOTester extension uses, with the differences listed per check under `divergences`.
+
+## Supported stacks
+
+| Stack | Audit | Fix |
+|---|---|---|
+| Static HTML | yes | auto |
+| Astro, Hugo, Eleventy, Vite | yes (reads the build output) | auto, in the source files |
+| Next.js | yes (reads the build output) | assisted: proposed diffs, applied only when you approve each one |
+| WordPress and other database-backed CMSs | fix list only, no score | none: content lives in the database |
+
+v0.1 has been tested end to end on static HTML; the framework paths are covered by unit tests but not yet by real-project runs, so please [report an unsupported stack](.github/ISSUE_TEMPLATE/unsupported-stack.md) if something looks off.
+
+For generated sites the audit reads the built HTML, because that is what crawlers and agents receive. If there is no build output yet, it asks before running your build command.
+
+## How the scoring works from source
+
+The audit reads your repo, not a live page. Most checks match what the extension sees on the live site. Things that only exist at runtime (response headers set by your host, Markdown served on request, JavaScript-injected tags) are read from host config (`_headers`, `vercel.json`, `netlify.toml`) where possible and marked "predicted" or "inconclusive" in the report. Confirm those on the live site: [check a live URL](https://aeotester.com/?utm_source=github&utm_medium=plugin) or use the Chrome extension.
 
 ## Privacy
 
-No network calls. Nothing is sent to aeotester.com or anywhere else. See [SECURITY.md](SECURITY.md).
+No network calls. The audit and the fixes read and write local files only, nothing is sent to aeotester.com or anywhere else, and nothing is committed for you. See [SECURITY.md](SECURITY.md).
+
+## Development
+
+```bash
+claude --plugin-dir ./aeotester-site-audit   # load the plugin for one session (/reload-plugins after edits)
+npm run check                               # rubric build check, rubric validation, no-dash check, unit tests
+claude plugin validate --strict .           # manifest and component validation
+claude plugin eval . --scaffold --ablation none --allow-tools "Bash(node:*)" Edit Write   # end-to-end evals (uses your Claude credits)
+```
+
+Rubric sources live in `rubric/checks/*.json`; `node scripts/build-rubric.mjs` rebuilds `rubric.json`.
 
 ## License
 
-Code: [MIT](LICENSE). Rubric (`rubric.json`): [CC BY 4.0](LICENSE-RUBRIC), attribution to [aeotester.com](https://aeotester.com/?utm_source=github&utm_medium=plugin).
-
----
-
-Check a live URL: [aeotester.com](https://aeotester.com/?utm_source=github&utm_medium=plugin)
+Code: [MIT](LICENSE). Rubric (`rubric.json`): [CC BY 4.0](LICENSE-RUBRIC) - reuse it with attribution to [aeotester.com](https://aeotester.com/?utm_source=github&utm_medium=plugin). The AI bot list comes from [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) (MIT).

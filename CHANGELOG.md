@@ -2,14 +2,22 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] - Unreleased
+
+First public release.
 
 ### Added
 
-- `/aeotester:audit`: zero-dependency Node audit of the site in the repo. Detects the stack (static HTML, Astro, Hugo, Eleventy, Next.js, Vite, WordPress and other CMSs), reads built HTML plus robots.txt, llms.txt, sitemaps, /.well-known/ and host config (`_headers`, `_redirects`, `vercel.json`, `netlify.toml`), runs all 26 checks and writes `aeotester-report.md`.
-- WordPress and other database-backed CMSs get a fix list instead of a score, and nothing is edited.
-- Rubric v1.1.0: fixes bugs found in the extension's checks (robots.txt grouping and precedence, status vs score mismatches, false positives) and records every difference from the extension in a `divergences` list per check.
-- `rubric.json`: 26 checks, 138 points, extracted from the AEOTester extension v1.3.1, with per-check scoring rules, source-file detection steps, parity notes and fix class. Plus `rubric.schema.json`, `scripts/validate-rubric.mjs` and `docs/rubric-review.md`.
-- Plugin scaffold: `plugin.json`, `marketplace.json`, and skills for `/aeotester:audit` and `/aeotester:fix`.
-- MIT license for code, CC BY 4.0 for the rubric.
-- CI: `claude plugin validate --strict` and a no-em-dash check.
+- `/aeotester:audit`: audits the site in the repo against the AEOTester rubric (26 checks, 138 points) and writes `aeotester-report.md` with the score, per-category scores, and every issue sorted by points lost with file:line.
+  - Detects static HTML, Astro, Hugo, Eleventy, Vite, Next.js, WordPress and other database-backed CMSs.
+  - Reads built HTML plus robots.txt, llms.txt, sitemaps, `/.well-known/` and host config (`_headers`, `_redirects`, `vercel.json`, `netlify.toml`).
+  - WordPress and other CMSs get a fix list instead of a score, and nothing is edited.
+- `/aeotester:fix`: fixes auto-fixable issues in the source files with a recipe per check. Shows a diff per file and asks before writing (`--yes` approves up front, diffs are still shown), never commits, and re-audits at the end.
+- `page-facts.mjs` and `generate-llms-txt.mjs` so fixes use real site data.
+- `rubric.json` (CC BY 4.0), built from `rubric/checks/*.json`. Rubric v1.1.0 fixes bugs found in the extension's checks and records every difference in a `divergences` list per check, including major-bot weighting for AI crawler access.
+- Unit tests for every check, end-to-end tests on fixture sites, and `claude plugin eval` cases for audit and fix.
+- CI: plugin validation, rubric build and validation, tests, and a no-em-dash check.
+
+### Not in this release
+
+- Broken link checking and repair. Planned for a later version.
