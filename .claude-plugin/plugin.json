@@ -22,5 +22,8 @@
     "structured-data",
     "llms-txt",
     "ai-crawlers"
-  ]
+  ],
+  "supportUrl": "https://github.com/shapito27/aeotester-site-audit/issues",
+  "documentationUrl": "https://github.com/shapito27/aeotester-site-audit#readme",
+  "privacyPolicyUrl": "https://github.com/shapito27/aeotester-site-audit/blob/main/SECURITY.md"
 }
