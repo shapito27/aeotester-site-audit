@@ -12,51 +12,42 @@
     "HTTP GET of .md probe URL (1500 ms timeout)"
   ],
   "scoring": {
-    "summary": "Tiered, first match wins: (0) negotiated request unreachable => warning 3 inconclusive; (1) negotiated response ok AND Content-Type matches /text\\/markdown/i => pass 5; (2) Link header advertises markdown alternate OR DOM has a markdown alternate <link> => warning 3; (3) .md probe returns non-HTML markdown => warning 2; (4) otherwise fail 0. Vary: Accept and X-Markdown-Tokens are recorded but not scored.",
+    "summary": "Tiered, first match wins: (1) server/edge code or host config in the repo that branches on the Accept header and returns text/markdown -> 5 (predicted); (2) the page has <link rel=alternate type=text/markdown|text/x-markdown> or host config sets a Link header value with both rel=alternate and a markdown type -> 3; (3) a non-HTML .md file for the page exists in the served root -> 2 (predicted); (4) otherwise 0. Every result below 5 is inconclusive: CDN-level negotiation (e.g. Cloudflare Markdown for Agents) cannot be seen in the repo.",
     "rules": [
       {
-        "condition": "probe URL: strip query and hash; path '' or '/' => '/index.md'; last path segment contains '.' => no probe (null); else pathname with trailing '/' removed + '.md'",
+        "condition": "md paths: '/' -> '/index.md'; '/x.html' or '/x.htm' -> '/x.md'; '/dir/' -> '/dir.md' and '/dir/index.md'; other last segment with a dot -> none; else path + '.md'",
         "points": "n/a"
       },
       {
-        "condition": "isUnreachable(negotiation): status in [0, 403, 429, 503] or timedOut (3000 ms page timeout)",
-        "status": "warning",
+        "condition": "a file among middleware.(js|ts), src/middleware.*, _worker.js, worker.js, src/worker.*, src/index.ts, server.(js|mjs|ts), code under functions/, netlify/edge-functions/, middleware/, src/middleware/, workers/, src/workers/, server/, or vercel.json / netlify.toml / nginx.conf / Caddyfile / wrangler.toml contains 'text/markdown' and the word 'accept' (not Accept-*)",
+        "status": "pass",
+        "points": 5,
+        "predicted": true
+      },
+      {
+        "condition": "page has link[rel~=\"alternate\"][type=\"text/markdown\"] or [type=\"text/x-markdown\"], OR a Link header value configured for the page path (_headers, netlify.toml, vercel.json) that itself has a markdown type and rel alternate",
         "points": 3,
         "inconclusive": true
       },
       {
-        "condition": "negotiation.ok AND Content-Type header matches /text\\/markdown/i",
-        "status": "pass",
-        "points": 5
-      },
-      {
-        "condition": "Link response header matches /text\\/markdown/i AND /rel=\"?alternate\"?/i (tested independently on the whole header string) OR document.querySelector('link[rel~=\"alternate\"][type=\"text/markdown\"], link[rel~=\"alternate\"][type=\"text/x-markdown\"]') exists",
-        "status": "warning",
-        "points": 3
-      },
-      {
-        "condition": "probe response ok AND NOT HTML (Content-Type not /text\\/html|application\\/xhtml/i and body not /^\\s*<(!doctype|html)/i) AND (Content-Type matches /markdown/i OR body matches /^\\s*#\\s+\\S/)",
-        "status": "warning",
-        "points": 2
+        "condition": "a file at one of the md paths exists in the served root, its body does not start with <!doctype or <html, and host config does not give it an HTML Content-Type",
+        "points": 2,
+        "inconclusive": true,
+        "predicted": true
       },
       {
         "condition": "none of the above",
-        "status": "fail",
-        "points": 0
-      },
-      {
-        "condition": "exception thrown anywhere",
-        "status": "fail",
-        "points": 0
+        "points": 0,
+        "inconclusive": true
       }
     ],
-    "status_mapping": "Fixed per tier: 5 pass, 3 warning, 2 warning, 0 fail.",
-    "inconclusive": "If the Accept: text/markdown request is unreachable (status 0/403/429/503 or timed out), returns warning with 3 points and details.inconclusive = true, regardless of DOM alternate or probe results."
+    "status_mapping": "5 pass; otherwise inconclusive, so the engine reports warning for 3, 2 and 0.",
+    "inconclusive": "Whether the host answers Accept: text/markdown cannot be seen in the repo when it is a CDN setting, so every result below 5 is inconclusive and the finding gives the curl command to verify live. The score still reflects what the repo shows."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/agent-readiness/markdown.mjs",
-    "source_procedure": "Tier 1 (negotiation) is server behaviour: look for evidence in host/server config - Cloudflare 'Markdown for Agents' is a zone setting (not in repo); check functions/_middleware.(js|ts) (Cloudflare Pages), middleware.ts (Next.js/Vercel), netlify/edge-functions/**, vercel.json 'rewrites'/'has' on header accept, nginx/Caddy configs, or server code that branches on Accept: text/markdown and sets Content-Type: text/markdown. If found, assume pass (unverified). Tier 2: grep page templates/head for <link rel=\"alternate\" type=\"text/markdown\" (static HTML *.html; Astro src/layouts/*.astro; Hugo layouts/_default/baseof.html, layouts/partials/head*.html, or outputFormats markdown in hugo.toml with alternate output; Eleventy _includes/**; Next.js app router metadata.alternates.types['text/markdown'] in app/**/layout.tsx|page.tsx, pages router <Head> in _document/_app; Vite index.html), and for Link headers containing text/markdown and rel=alternate in _headers (Netlify/Cloudflare Pages), netlify.toml [[headers]], vercel.json headers. Tier 3: check whether a .md file will be served at <path>.md or /index.md (public/**/*.md, static/**/*.md, Hugo markdown output format, build output) that starts with '# Heading' or will get a markdown Content-Type.",
+    "source_procedure": "Runs per page. Tier 1: scan edge/server code and host config files for Accept-header handling that returns text/markdown. Tier 2: the page's <link rel=alternate type=text/markdown> and Link headers from _headers / netlify.toml / vercel.json for the page path. Tier 3: a .md file for the page path in the served root (see md paths). Static hosts serve .md with a markdown or text Content-Type, so the file content is not required to start with '# '.",
     "llm_criteria": "Judge whether any server/edge code or host config found actually returns Content-Type text/markdown when the request Accept header contains text/markdown for the audited page (not just for a single API route). If unsure, do not award tier 1; fall back to tiers 2/3."
   },
   "parity": {
@@ -80,5 +71,32 @@
     "markdown.md_variant",
     "markdown.vary_accept"
   ],
-  "extension_source": "src/shared/checks/markdown-for-agents-checker.js"
+  "extension_source": "src/shared/checks/markdown-for-agents-checker.js",
+  "divergences": [
+    {
+      "extension": "Tier 1 sends a request with Accept: text/markdown and checks the response Content-Type; an unreachable request scores 3 inconclusive.",
+      "plugin": "Tier 1 looks for Accept handling that returns text/markdown in edge/server code or host config (predicted 5). Results below 5 are marked inconclusive with a curl command to verify.",
+      "reason": "Source-vs-live: negotiation is runtime behaviour, often a CDN toggle not in the repo."
+    },
+    {
+      "extension": "The .md probe is skipped when the last path segment has a dot, so /page.html never probes /page.md.",
+      "plugin": "/page.html probes /page.md; a directory path also tries /dir/index.md.",
+      "reason": "Static sites serve pages as .html, so the probe never ran for them."
+    },
+    {
+      "extension": "The Link header is tested for text/markdown and rel=alternate independently over the whole header string.",
+      "plugin": "Each comma-separated link value must carry both.",
+      "reason": "An unrelated rel=alternate next to another link mentioning text/markdown was counted."
+    },
+    {
+      "extension": "The .md probe needs a markdown Content-Type or a body starting with '# '.",
+      "plugin": "Any existing non-HTML .md file counts (predicted), unless host config gives it an HTML Content-Type.",
+      "reason": "Source-vs-live: static hosts serve .md files with a markdown/text type; the Content-Type is not in the repo."
+    },
+    {
+      "extension": "Link header and DOM alternate come from the live response and rendered DOM.",
+      "plugin": "Link headers come from host config (_headers, netlify.toml, vercel.json); the alternate from the built HTML.",
+      "reason": "Source-vs-live."
+    }
+  ]
 }

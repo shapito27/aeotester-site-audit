@@ -12,19 +12,19 @@
     "page URL (hostname for same-site comparison)"
   ],
   "scoring": {
-    "summary": "Probes 11 paths (concurrency 6, 1500 ms timeout each). A probe counts as found only if response.ok, the body is not HTML, and the path's validator passes on the parsed JSON. Found artifacts are grouped into categories (mcp, a2a, skills, api, oauth, ai) and WebMCP annotations add a 'webmcp' category. Score is by number of distinct categories: 3+ -> 6 pass, 2 -> 5 pass, 1 -> 3 warning. If none found: if every probe was unreachable -> na (inconclusive); else if the page shows same-site API evidence -> fail 0; else -> na (not applicable, excluded from denominator).",
+    "summary": "Looks for the 11 discovery files in the served root (and source public dir). A file counts only if its body is not HTML (by host-config Content-Type or leading <!doctype/<html) and the path's validator passes on the parsed JSON. A framework route handler that would serve the path (app/**/route.ts, src/pages/**.ts, src/routes/**/+server.ts) counts as predicted. Found artifacts are grouped into categories (mcp, a2a, skills, api, oauth, ai); WebMCP annotations on any audited page add 'webmcp'. 3+ categories -> 6, 2 -> 5, 1 -> 3. If none: same-site API evidence on any audited page -> 0; else not applicable (na, excluded from the denominator).",
     "rules": [
       {
         "step": "probe",
-        "condition": "GET each path on origin with backgroundFetch(method GET, timeoutMs 1500), bounded concurrency 6. Order of ARTIFACTS list below."
+        "condition": "for each path, read <servedRoot or fileRoot><path>, then <sourcePublicDir><path>; Content-Type from host config headers for the path (_headers, netlify.toml, vercel.json)"
       },
       {
         "step": "classify",
-        "condition": "contentType = Content-Type header (case-insensitive). isHtml = /text\\/html|application\\/xhtml/i on content-type OR body matches /^\\s*<(!doctype|html)/i. If body non-empty and not HTML, JSON.parse(body); json = null on parse failure."
+        "condition": "isHtml = /text\\/html|application\\/xhtml/i on the configured content-type OR body matches /^\\s*<(!doctype|html)/i. If body non-empty and not HTML, JSON.parse(body); json = null on parse failure."
       },
       {
         "step": "hit rule",
-        "condition": "artifact found only when probe.ok (2xx) AND NOT isHtml AND validator(json, probe) returns true (exceptions -> false)"
+        "condition": "artifact found when the file exists AND NOT isHtml AND validator(json, file) is true; predicted when no file exists but a route handler for the path does"
       },
       {
         "artifact": "/.well-known/mcp/server-card.json",
@@ -94,7 +94,7 @@
       },
       {
         "step": "webmcp",
-        "condition": "document.querySelectorAll('[toolname], [tooldescription]').length > 0",
+        "condition": "any audited page has elements matching '[toolname], [tooldescription]'",
         "effect": "adds category 'webmcp'"
       },
       {
@@ -113,30 +113,30 @@
         "points": 3
       },
       {
-        "condition": "0 categories AND every probe isUnreachable (status 0, 403, 429, 503, or timedOut)",
+        "condition": "0 categories AND every probe unreachable: cannot happen from source (files are read, never fetched)",
         "status": "na",
         "applicable": false,
         "points": 0,
         "note": "details.inconclusive = true; checked BEFORE API evidence"
       },
       {
-        "condition": "0 categories AND at least one probe reached AND findApiEvidence() non-empty",
+        "condition": "0 categories AND findApiEvidence() non-empty on any audited page",
         "status": "fail",
         "points": 0
       },
       {
-        "condition": "0 categories AND at least one probe reached AND no API evidence",
+        "condition": "0 categories AND no API evidence",
         "status": "na",
         "applicable": false,
         "points": 0
       },
       {
         "step": "findApiEvidence",
-        "condition": "Scan first 500 a[href]; resolve against page URL; keep only same-site links (lowercase, strip leading 'www.' from both hosts; equal, or one endsWith '.'+other). Evidence if first path segment (lowercased) is one of [api, apis, developer, developers, docs, documentation, graphql, swagger, openapi, api-docs, api-reference] OR link hostname matches /^(api|apis|developers?|docs)\\./i. Collect up to 5 unique origin+pathname samples."
+        "condition": "On every audited page, scan the first 500 a[href]; resolve against the page URL (site base URL or a placeholder host, so relative links are same-site); keep http(s) same-site links (lowercase, strip leading 'www.'; equal, or one endsWith '.'+other). Evidence if the first path segment (lowercased) is one of [api, apis, developer, developers, docs, documentation, graphql, swagger, openapi, api-docs, api-reference] OR the link hostname matches /^(api|apis|developers?|docs)\\./i. Up to 5 samples per page."
       },
       {
         "step": "findApiEvidence (cont.)",
-        "condition": "Also evidence: any link[rel~=\"service-desc\"] or link[rel~=\"describedby\"]; any script[type=\"application/ld+json\"] whose text matches /\"@type\"\\s*:\\s*\"WebAPI\"/i"
+        "condition": "Also evidence: link[rel~=\"service-desc\"] or link[rel~=\"describedby\"]; a JSON-LD node (any depth) with @type WebAPI"
       },
       {
         "condition": "any exception thrown",
@@ -144,13 +144,13 @@
         "points": 0
       }
     ],
-    "status_mapping": "Explicit per branch: 1 category -> warning (3); 2 -> pass (5); 3+ -> pass (6); none found + API evidence -> fail (0); none found + no evidence or all probes unreachable -> na with applicable:false (maxScore 6 removed from the 138 denominator by ScoringEngine).",
-    "inconclusive": "If no artifact is found and ALL 11 probes are unreachable (status 0/403/429/503 or timed out), returns status 'na', applicable false, details.inconclusive true, score 0 - so it is excluded from the denominator rather than half credit. If at least one probe was reached, unreachable individual probes are simply treated as not found."
+    "status_mapping": "1 category -> 3 (warning); 2 -> 5 (pass); 3+ -> 6 (pass); none found + API evidence -> 0 (fail); none found + no evidence -> na (weight removed from the denominator).",
+    "inconclusive": "Not used: files are read from the repo, so the extension's all-probes-unreachable branch cannot occur. Route handlers are marked predicted."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/agent-readiness/protocols.mjs",
-    "source_procedure": "1) Locate the static/public root per stack: static HTML: repo root or build dir; Astro: public/; Hugo: static/; Eleventy: passthrough-copied dirs from .eleventy.js (addPassthroughCopy) or src/; Next.js: public/ plus app/.well-known/**/route.ts or pages/api; Vite SPA: public/. 2) For each of the 11 paths, check whether a file exists at <publicRoot><path> (also route handlers producing it, e.g. Next app/.well-known/api-catalog/route.ts, Astro src/pages/.well-known/*.json.ts, Hugo content/layouts outputs). 3) Parse the file and apply the exact validator (object, name, linkset, openapi/swagger, issuer, resource; /.well-known/ai any non-empty non-HTML text). For /.well-known/api-catalog (no extension) also check host config (_headers, netlify.toml, vercel.json headers) for Content-Type containing 'linkset' as an alternate pass. 4) Check host rewrite config (_redirects, vercel.json rewrites, netlify.toml) for SPA catch-all rewrites that would serve index.html for missing paths (those are HTML and never count). 5) Grep templates/layouts/components for attributes toolname= or tooldescription= (WebMCP). 6) Count distinct categories and score. 7) If zero: scan templates for same-site links whose first path segment is in the API list or whose host is api./apis./developer(s)./docs. subdomain of the site domain, for <link rel=service-desc|describedby>, and JSON-LD with @type WebAPI; also consider presence of an actual API in the repo (pages/api, app/api, openapi.yaml). Evidence -> fail 0; none -> na.",
+    "source_procedure": "Site scope. Read the 11 paths from the served root / public dir with the validators above, Content-Type from host config; count framework route handlers for those paths as predicted; scan every audited page for WebMCP attributes and, when nothing is found, for same-site API links, service-desc/describedby links and WebAPI JSON-LD. Repo API routes (pages/api, app/api) are not treated as evidence, matching the extension's page-only evidence.",
     "llm_criteria": "Judge only for the no-artifact case: does the site have a developer or API surface? Mirror the extension: same-site links to /api, /apis, /developer(s), /docs, /documentation, /graphql, /swagger, /openapi, /api-docs, /api-reference (first segment only) or to api./apis./developer(s)./docs. subdomains; a service-desc/describedby link; a WebAPI JSON-LD entity. Links to third-party APIs or anchor text alone do NOT count. The extension only inspects the analyzed page's links, so for parity evaluate the site's main layout/nav/footer plus the target page."
   },
   "parity": {
@@ -179,5 +179,27 @@
     "agent.protocols.api_evidence",
     "agent.protocols.applicable"
   ],
-  "extension_source": "src/shared/checks/agent-protocols-checker.js"
+  "extension_source": "src/shared/checks/agent-protocols-checker.js",
+  "divergences": [
+    {
+      "extension": "Probes the 11 paths over HTTP with a 1500 ms timeout; Content-Type comes from the response.",
+      "plugin": "Reads the files from the served root / public dir; Content-Type from host config; framework route handlers for the paths count as predicted.",
+      "reason": "Source-vs-live: the plugin never fetches."
+    },
+    {
+      "extension": "If every probe is unreachable the check is na (inconclusive).",
+      "plugin": "Branch does not exist; a missing file is an informative absence.",
+      "reason": "Source-vs-live: a file missing from the served root will 404 on a static host."
+    },
+    {
+      "extension": "WebMCP annotations and API evidence are read from the one page being analyzed.",
+      "plugin": "They are read from every audited page.",
+      "reason": "Site-scope check: the answer should not depend on which page was opened."
+    },
+    {
+      "extension": "The page host is the live URL.",
+      "plugin": "The page host comes from the site base URL; without one, only relative links (and api./docs. subdomains of nothing) are same-site.",
+      "reason": "Source-vs-live."
+    }
+  ]
 }

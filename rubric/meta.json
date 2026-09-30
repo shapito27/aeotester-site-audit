@@ -1,7 +1,7 @@
 {
   "$schema": "./rubric.schema.json",
   "name": "AEOTester AEO rubric",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "CC-BY-4.0",
   "attribution": "AEOTester (https://aeotester.com). Reuse requires attribution - see LICENSE-RUBRIC.",
   "source": {

@@ -76,6 +76,12 @@ export async function runAudit(site, options = {}) {
   const modules = new Map()
   for (const entry of entries) modules.set(entry.id, await loadModule(entry))
 
+  // A database-backed CMS gets a fix list, not a score: repo files say
+  // little about the live site (WordPress serves robots.txt virtually, etc.)
+  if (site.mode === 'report-only') {
+    return { rubricVersion: rubric.version, maxScore: rubric.max_score, total: 0, available: 0, percentage: 0, grade: '', naWeight: 0, skippedWeight: rubric.max_score, categories: [], checks: entries.map(e => ({ id: e.id, name: e.name, category: e.category, weight: e.weight, fixable: 'report-only', status: 'skipped', score: 0, message: 'Report-only: check the live site.', findings: [] })), rubric }
+  }
+
   const pages = site.mode === 'full' ? site.pages.map(p => loadPage(site, p)) : []
   const helpers = {
     resolveLocal: urlPath => resolveLocal(site, urlPath),

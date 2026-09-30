@@ -10,7 +10,7 @@
     "rendered DOM body: semantic elements, ARIA roles/attributes, form inputs and labels, skip links"
   ],
   "scoring": {
-    "summary": "Start at 4. Deduct 1.75 if no <main> or [role=\"main\"]; 0.75 if no <nav> or [role=\"navigation\"]; 0.75 if fewer than 50% of visible form inputs are labelled (only when inputs exist); 0.75 if total semantic element count < 5 AND no main. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore). ARIA counts and skip link are informational only.",
+    "summary": "Start at 4. Deduct 1.75 if no <main> or [role=\"main\"]; 0.75 if no <nav> or [role=\"navigation\"]; 0.75 if fewer than 50% of form fields (input except hidden/submit/button/reset/image, textarea, select) are labelled (only when fields exist); 0.75 if total semantic element count < 5 AND no main. Score = max(0, round to 1 decimal); the engine floors it. ARIA counts and skip link are informational only.",
     "rules": [
       {
         "condition": "semantic element count = number of elements matching each of: main, nav, article, section, aside, header, footer, figure, figcaption (summed)",
@@ -25,7 +25,7 @@
         "points": "-0.75"
       },
       {
-        "condition": "inputs = 'input:not([type=\"hidden\"]), textarea, select'; an input is labelled if it has an id with a matching label[for=id], or a non-empty aria-label, or a non-empty aria-labelledby, or is inside a <label>. If inputs exist and round(labelled/inputs*100) < 50",
+        "condition": "fields = 'input:not([type=\"hidden\" i]), textarea, select' minus inputs of type submit, button, reset or image; a field is labelled if its id equals the for attribute of some <label> (compared as strings), or it has a non-empty aria-label or aria-labelledby, or it is inside a <label>. If fields exist and round(labelled/fields*100) < 50",
         "points": "-0.75"
       },
       {
@@ -41,17 +41,17 @@
         "points": "0 (informational)"
       },
       {
-        "condition": "finalScore = max(0, round(score*10)/10); reported score = Math.floor(finalScore)",
+        "condition": "score = max(0, round(score*10)/10); the engine floors it",
         "points": "n/a"
       }
     ],
-    "status_mapping": "Using decimal finalScore: >= 3 pass, >= 2 warning, else fail. Reported points = floor. Reachable outcomes: 4 pass (no issues); 3.25 pass/3 (missing nav or poor labels); 2.5 warning/2 (nav + labels missing); 2.25 warning/2 (missing main only, >= 5 semantic elements); 1.5 fail/1 (missing main, <5 semantic, or main+nav); 0.75 fail/0; 0 fail/0.",
+    "status_mapping": "Engine rule on the floored score: 4 pass; 2-3 warning; 0-1 fail. Reachable: 4 (no issues); 3.25 -> 3 (missing nav or poor labels); 2.5 -> 2; 2.25 -> 2 (missing main only); 1.5 -> 1; 0.75 -> 0; 0.",
     "inconclusive": null
   },
   "detect": {
     "method": "script",
     "script": "checks/content/accessibility.mjs",
-    "source_procedure": "Evaluate the full page markup that composes each route: layout + page + components. Static HTML: each *.html. Astro: src/layouts/*.astro plus src/pages/** and imported src/components/**. Hugo: layouts/_default/baseof.html, single.html, list.html, partials/**. Eleventy: _includes/** layouts plus page templates. Next.js: app/**/layout.tsx + page.tsx and components (JSX tags <main>, <nav>, role=\"main\"); pages router: _app/_document + pages/**. Vite SPA: index.html is usually just <div id=\"app\">, so inspect root components (src/App.vue|tsx, router views). Count tags and role attributes, check form inputs for labels, then apply the deductions."
+    "source_procedure": "Runs per page on the built HTML in the served root: count semantic tags and role attributes, check form fields for labels, then apply the deductions. Components that render landmarks at runtime (Vite SPA shells) are not seen."
   },
   "parity": {
     "level": "partial",
@@ -74,5 +74,27 @@
     "a11y.semantic.count",
     "a11y.skip_link"
   ],
-  "extension_source": "src/shared/checks/accessibility-checker.js"
+  "extension_source": "src/shared/checks/accessibility-checker.js",
+  "divergences": [
+    {
+      "extension": "Inputs of type submit, button, reset and image are counted as fields that need a <label>.",
+      "plugin": "They are excluded; buttons are named by their value or default label.",
+      "reason": "A normal search or signup form (one labelled field plus a submit button) could drop below 50% labelled."
+    },
+    {
+      "extension": "label[for] is found by interpolating the id into a selector, which throws for ids containing quotes.",
+      "plugin": "label for values are compared as plain strings.",
+      "reason": "Unusual ids crashed the check."
+    },
+    {
+      "extension": "Counts elements in the live DOM after JavaScript, including third-party widgets.",
+      "plugin": "Counts elements in the built HTML.",
+      "reason": "Source-vs-live: the plugin reads the repo."
+    },
+    {
+      "extension": "Status comes from the unfloored score (e.g. 4.5 is pass) while the reported score is floored.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    }
+  ]
 }

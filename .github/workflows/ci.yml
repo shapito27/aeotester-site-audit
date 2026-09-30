@@ -15,8 +15,12 @@ jobs:
           node-version: 22
       - name: No em or en dashes
         run: node scripts/check-no-dashes.mjs
-      - name: Validate rubric
-        run: node scripts/validate-rubric.mjs
+      - name: Rubric is built and valid
+        run: |
+          node scripts/build-rubric.mjs --check
+          node scripts/validate-rubric.mjs
+      - name: Tests
+        run: npm test
       - name: Validate plugin and marketplace
         run: |
           npm install -g @anthropic-ai/claude-code

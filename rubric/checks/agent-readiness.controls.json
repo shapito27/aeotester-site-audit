@@ -29,12 +29,12 @@
         "points": "+1 if pass rate >= 90% or no links"
       },
       {
-        "condition": "fakeClickables: 'div[onclick], span[onclick], li[onclick], p[onclick], img[onclick], td[onclick]' that have no role attribute at all and are not hidden. Problem if no tabindex attribute",
+        "condition": "fakeClickables: 'div[onclick], span[onclick], li[onclick], p[onclick], img[onclick], td[onclick]' whose role is not 'button' (those are in the buttons category) and not hidden. Problem if no tabindex attribute",
         "points": "+1 if pass rate >= 90% or none",
         "note": "Only literal inline onclick attributes; listeners attached with addEventListener or framework handlers (React onClick, Vue @click, Svelte on:click, Alpine @click) are not visible and never count"
       },
       {
-        "condition": "autocomplete: <input> elements not hidden. Candidate if type (lowercased, default 'text') is not in ['hidden','password','search','checkbox','radio','submit','button','reset','file','image','range','color'] AND (type is 'email' or 'tel' OR `${name} ${id}` matches /(^|[-_ ])(f(irst)?name|l(ast)?name|fullname|surname|address|street|city|zip|postal|postcode|phone|tel|email|country|state|company|organization)/i). Problem if autocomplete attribute is missing, blank, or 'off'",
+        "condition": "autocomplete: <input> elements not hidden. Candidate if type (lowercased, default 'text') is not in ['hidden','password','search','checkbox','radio','submit','button','reset','file','image','range','color'] AND (type is 'email' or 'tel' OR a token of `${name} ${id}` (split on - _ space digits and camelCase, lowercased), or two adjacent tokens joined, is one of fname, firstname, lname, lastname, fullname, surname, name, address, street, city, zip, zipcode, postal, postalcode, postcode, phone, tel, email, country, state, company, organization). Problem if autocomplete attribute is missing, blank, or 'off'",
         "points": "+1 if pass rate >= 90% or no candidates"
       },
       {
@@ -49,7 +49,7 @@
   "detect": {
     "method": "script",
     "script": "checks/agent-readiness/controls.mjs",
-    "source_procedure": "Prefer scanning built HTML output (dist/, _site/, public/ after hugo, out/ or .next prerendered HTML) with an HTML parser and applying the rules exactly. Without a build, scan markup sources: static *.html; Astro src/**/*.astro (template part after frontmatter); Hugo layouts/**/*.html and shortcodes; Eleventy _includes/** and src/** templates (njk, liquid, md with HTML); Next.js/React app/**, pages/**, components/**/*.tsx|jsx (map JSX: className ignored, aria-label/aria-labelledby/title/alt/tabIndex=tabindex/autoComplete=autocomplete, href; React onClick does NOT render an onclick attribute so do not count it as a fake clickable); Vite SPA index.html plus src/** components. For each file collect buttons, anchors, inline onclick elements, and inputs; skip elements inside hidden or aria-hidden=\"true\" wrappers; compute per-category pass rate per page (or per component when pages cannot be composed) and apply the >= 90% threshold. When labels come from expressions ({t('save')}, {{ .Title }}), treat as named if the expression yields text."
+    "source_procedure": "Runs per page on the built HTML in the served root with the rules above. Controls rendered by client JavaScript or framework handlers (React onClick etc.) are not in the HTML and are not counted."
   },
   "parity": {
     "level": "partial",
@@ -71,5 +71,22 @@
     "agent.controls.no_fake_clickables",
     "agent.controls.inputs.autocomplete"
   ],
-  "extension_source": "src/shared/checks/agent-controls-checker.js"
+  "extension_source": "src/shared/checks/agent-controls-checker.js",
+  "divergences": [
+    {
+      "extension": "Elements with ANY role attribute (e.g. role=\"presentation\") are excluded from fake clickables.",
+      "plugin": "Only role=\"button\" is excluded (it is counted as a button).",
+      "reason": "The code comment says role=button only; other roles do not make a div operable."
+    },
+    {
+      "extension": "Personal-data names use a prefix-anchored regex: name=\"name\" and \"emailAddress\" are not candidates while \"statement\", \"telemetry\" or \"cityscape\" are.",
+      "plugin": "Names are split into tokens (separators and camelCase) and matched whole, with 'name', 'zipcode' and 'postalcode' added.",
+      "reason": "False negatives on the most common field names and false positives on unrelated ones."
+    },
+    {
+      "extension": "Inspects the live DOM, including controls added by client JS and third-party widgets.",
+      "plugin": "Inspects the built HTML.",
+      "reason": "Source-vs-live: the plugin reads the repo."
+    }
+  ]
 }

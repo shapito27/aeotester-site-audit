@@ -11,101 +11,65 @@
     "rendered DOM: document.body text, first <h1>, document.title"
   ],
   "scoring": {
-    "summary": "Fetch raw HTML. Unreachable or non-200 -> warning 3 (inconclusive). Non-HTML content-type -> pass 6. Otherwise parse raw HTML, count words in raw body and rendered body (removing script, style, noscript, template, svg). ratio = raw/dom capped at 1 (1 if dom < 30 words). Start 6: empty SPA root in raw HTML -> 0; else ratio < 0.25 -> 0; else ratio < 0.6 -> 3. Then -1 if rendered H1 is missing from raw HTML, -1 if rendered title missing from raw HTML, floor at 0. Status >= 5 pass, >= 3 warning, else fail; a fail on a redirected or truncated fetch is raised to warning 3.",
+    "summary": "The built HTML in the repo is what a non-JS agent receives, so it is evaluated on its own (no rendered-DOM comparison). Count words in the body (textContent without script, style, noscript, template, svg). Look for an empty SPA mount (#root, #app, #__next, #__nuxt, #___gatsby, #svelte, #q-app, [data-reactroot]; any matching element). Empty mount and < 50 words -> 0. Empty mount and 50-149 words -> 3 (predicted). No empty mount, < 30 words and client scripts -> 3 (inconclusive). Otherwise 6. On a page flagged by one of those rules, -1 if the HTML has no <h1> and -1 if it has no <title> (floor 0).",
     "rules": [
       {
-        "condition": "isUnreachable(page): status 0, 403, 429, 503 or timedOut (fetch timeout 3000 ms)",
-        "status": "warning",
-        "points": 3,
-        "inconclusive": true
+        "step": "word count",
+        "condition": "body textContent without script, style, noscript, template, svg subtrees, split on /\\s+/"
       },
       {
-        "condition": "page.status !== 200 (e.g. 404, 500, 401)",
-        "status": "warning",
-        "points": 3,
-        "inconclusive": true
-      },
-      {
-        "condition": "Content-Type present and does not match /text\\/html|application\\/xhtml/i",
-        "status": "pass",
-        "points": 6,
-        "note": "missing Content-Type is treated as HTML"
-      },
-      {
-        "step": "word counts",
-        "condition": "clone body, remove 'script, style, noscript, template, svg', textContent, trim, split /\\s+/. rawWordCount from DOMParser-parsed raw HTML body; domWordCount from live document.body."
-      },
-      {
-        "step": "ratio",
-        "condition": "ratio = 1 if domWordCount < 30, else min(1, rawWordCount / domWordCount)"
+        "step": "client scripts",
+        "condition": "<script> with no type or type module / text/javascript / application/javascript, having src or inline code"
       },
       {
         "step": "empty app root",
-        "condition": "first selector in order ['#root', '#app', '#__next', '#__nuxt', '#___gatsby', '#svelte', '#q-app', '[data-reactroot]'] whose FIRST matching element in raw HTML has textContent.trim() === ''"
+        "condition": "first selector in ['#root', '#app', '#__next', '#__nuxt', '#___gatsby', '#svelte', '#q-app', '[data-reactroot]'] with ANY matching element whose textContent.trim() is empty"
       },
       {
-        "condition": "empty app root found",
+        "condition": "empty app root AND words < 50",
         "points": "score = 0"
       },
       {
-        "condition": "else ratio < 0.25",
-        "points": "score = 0"
+        "condition": "empty app root AND 50 <= words < 150",
+        "points": "score = 3",
+        "predicted": true
       },
       {
-        "condition": "else ratio < 0.6",
-        "points": "score = 3"
+        "condition": "no empty app root AND words < 30 AND client scripts present",
+        "points": "score = 3",
+        "inconclusive": true
       },
       {
-        "condition": "else (ratio >= 0.6)",
+        "condition": "otherwise (server HTML carries the content)",
         "points": "score = 6"
       },
       {
-        "condition": "rendered DOM has an <h1> with non-empty text AND raw HTML has no <h1> element at all",
-        "points": "-1"
+        "condition": "one of the three rules above fired AND the HTML has no <h1>",
+        "points": "-1",
+        "predicted": true
       },
       {
-        "condition": "document.title non-empty AND raw HTML <title> empty or missing",
-        "points": "-1"
+        "condition": "one of the three rules above fired AND the HTML <title> is empty or missing",
+        "points": "-1",
+        "predicted": true
       },
       {
         "step": "clamp",
         "condition": "score = max(0, score)"
-      },
-      {
-        "condition": "score >= 5",
-        "status": "pass"
-      },
-      {
-        "condition": "score >= 3",
-        "status": "warning"
-      },
-      {
-        "condition": "score < 3",
-        "status": "fail"
-      },
-      {
-        "condition": "status fail AND (page.redirected OR page.truncated (body > 2 MB default cap))",
-        "status": "warning",
-        "points": 3
-      },
-      {
-        "condition": "exception thrown",
-        "status": "fail",
-        "points": 0
       }
     ],
-    "status_mapping": "score >= 5 pass, 3-4 warning, 0-2 fail; fail downgraded to warning with score 3 when the raw fetch was redirected or truncated; unreachable and non-200 are warning 3.",
-    "inconclusive": "Unreachable (0/403/429/503/timeout) or any non-200 status returns warning with score 3 of 6 and details.inconclusive true; never a fail."
+    "status_mapping": "Engine rule: 5-6 pass, 3-4 warning, 0-2 fail; inconclusive results are always warning.",
+    "inconclusive": "A near-empty body that loads scripts (no SPA mount found) scores 3 with inconclusive true: the HTML alone cannot show whether JavaScript adds the content. Verify live with curl -s <url>."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/agent-readiness/server-rendered.mjs",
-    "source_procedure": "1) Identify rendering mode per stack. Static HTML: raw == rendered unless scripts inject content; inspect body. Astro: default static/SSR output is server-rendered; flag components with client:only (render nothing server-side) and pages whose main content is in a client:only island. Hugo/Eleventy: static output, server-rendered unless a JS framework mounts into an empty div. Next.js: app router server components render HTML; flag pages that are 'use client' with data fetched in useEffect, dynamic(() => ..., { ssr: false }) around main content, or output: 'export' pages with empty shells; pages router: getServerSideProps/getStaticProps render HTML, pure client fetching does not. Vite SPA (React/Vue/Svelte without SSR): index.html has an empty <div id=\"root\"> or <div id=\"app\"> -> score 0. 2) Where a build is possible, build and inspect the output HTML (dist/, out/, public/ for Hugo, _site/ for Eleventy, .next/server/app/*.html) and compute rawWordCount from it. 3) Check the output HTML for the app-root selectors with empty text, for an <h1> element and non-empty <title>. 4) Estimate rendered word count from the source components/content; if raw >= 60% of it, full credit. 5) Apply penalties and thresholds exactly.",
+    "source_procedure": "Runs per page on the built HTML in the served root (static HTML, dist/, _site/, public/ after hugo, out/). Parse the HTML, count body words, look for empty SPA mount points and for <h1>/<title>, and score as above. Needs a build for framework sites; Vite SPA output usually has an empty #root/#app and scores 0.",
     "llm_criteria": "Decide whether the page's main text, H1 and <title> are emitted in server HTML or only after client JavaScript runs. Estimate the share of final visible words present in server HTML and bucket it: < 25% -> 0, 25-59% -> 3, >= 60% -> 6. Any SPA mount node from the selector list that is empty in server HTML is an automatic 0 (even if other content exists)."
   },
   "parity": {
     "level": "partial",
-    "note": "The extension diffs a live fetch against the live DOM; from source, the rendered DOM must be estimated. Middleware, edge rendering, A/B scripts, CMS content, consent walls, bot-specific responses and host behavior (redirects, 404/401 pages, compression) are invisible to source analysis. Building the site gives near-exact raw HTML for static generators, but the rendered word count still needs estimation when client JS adds content."
+    "note": "The extension diffs a live fetch against the live DOM. The plugin only has the built HTML, which is what non-JS agents receive, so it cannot measure how much text client JavaScript adds; it infers JS rendering from empty SPA mounts and near-empty bodies. Middleware, edge rendering, A/B scripts, CMS content, consent walls, bot-specific responses and host behavior (redirects, 404/401, compression) are not visible."
   },
   "fixable": "assisted",
   "fix_recipe": "fix-recipes/agent-readiness.server-rendered.md",
@@ -123,5 +87,32 @@
     "agent.ssr.h1_in_raw",
     "agent.ssr.title_in_raw"
   ],
-  "extension_source": "src/shared/checks/server-rendered-checker.js"
+  "extension_source": "src/shared/checks/server-rendered-checker.js",
+  "divergences": [
+    {
+      "extension": "Computes ratio = raw words / rendered-DOM words and buckets it (< 0.25 -> 0, < 0.6 -> 3, else 6).",
+      "plugin": "Scores the raw HTML alone: an empty SPA mount with < 50 words -> 0, with 50-149 words -> 3, a near-empty body that loads scripts -> 3 inconclusive, otherwise 6.",
+      "reason": "Source-vs-live: the repo has no rendered DOM. The built HTML is what agents receive."
+    },
+    {
+      "extension": "An empty app root forces 0 even when the rest of the page is fully server-rendered (e.g. an empty widget mount).",
+      "plugin": "An empty mount only costs points when the server HTML has little text (< 150 words).",
+      "reason": "Server-rendered pages with a small client widget were failed."
+    },
+    {
+      "extension": "Only the first element per app-root selector is checked.",
+      "plugin": "Every matching element is checked.",
+      "reason": "A non-empty first [data-reactroot] hid an empty real mount."
+    },
+    {
+      "extension": "-1 each when the rendered DOM has an H1 / title that the raw HTML lacks.",
+      "plugin": "-1 each when the HTML lacks <h1> / <title> on a page already flagged as client-rendered (predicted).",
+      "reason": "Source-vs-live: whether JavaScript adds them cannot be seen; a missing H1 on a static page is the headings check's job."
+    },
+    {
+      "extension": "Unreachable or non-200 fetches score warning 3; non-HTML content types pass; redirected or truncated fails are raised to 3.",
+      "plugin": "Not applicable: only .html files in the served root are audited.",
+      "reason": "Source-vs-live: no HTTP fetch."
+    }
+  ]
 }

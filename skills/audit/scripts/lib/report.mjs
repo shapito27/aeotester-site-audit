@@ -26,6 +26,12 @@ export function renderReport(site, audit, options = {}) {
 
   for (const note of site.notes) L.push(`> ${note}`, '')
 
+  if (site.mode === 'report-only') {
+    renderFixList(L, options.rubric)
+    footer(L)
+    return L.join('\n')
+  }
+
   if (site.mode === 'needs-build' || site.mode === 'no-pages') {
     L.push('No score: there were no built pages to audit.', '')
     footer(L)
@@ -87,12 +93,30 @@ export function renderReport(site, audit, options = {}) {
   return L.join('\n')
 }
 
+// Database-backed CMS: no score, a checklist of what to fix in the CMS instead
+function renderFixList(L, rubric) {
+  L.push('## Fix list', '')
+  L.push('This site is built with a database-backed CMS, so the pages are not in the repo and no score is given. Nothing was edited. Work through this list in your CMS (theme, SEO plugin, or hosting settings), then check a live page to get a score.', '')
+  for (const cat of rubric.categories) {
+    const checks = rubric.checks.filter(c => c.category === cat.id).sort((a, b) => b.weight - a.weight)
+    L.push(`### ${cat.name} (${cat.max} pts)`, '')
+    for (const c of checks) L.push(`- [ ] **${c.name}** (${c.weight} pts${c.conditional ? ', only if you expose an API or agent' : ''}) - ${esc(firstSentence(c.description))}`)
+    L.push('')
+  }
+}
+
+function firstSentence(text) {
+  const m = /^[\s\S]*?[a-z0-9)"'][.!?](\s|$)/.exec(text || '')
+  return (m ? m[0] : text || '').trim()
+}
+
 function footer(L) {
   L.push('---', '', 'Check a live URL: https://aeotester.com/?utm_source=plugin&utm_medium=report', '')
 }
 
 export function renderSummary(site, audit) {
   if (site.mode === 'needs-build' || site.mode === 'no-pages') return site.notes.join(' ')
+  if (site.mode === 'report-only') return `Report-only (${site.stack.id}): content lives in the database, so no score. Wrote a fix list of ${audit.checks.length} checks to work through in the CMS.`
   const worst = audit.checks
     .filter(c => c.status === 'fail' || c.status === 'warning')
     .sort((a, b) => b.lost - a.lost)

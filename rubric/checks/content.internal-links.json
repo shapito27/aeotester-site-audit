@@ -11,11 +11,11 @@
     "window.location.hostname"
   ],
   "scoring": {
-    "summary": "Start at 4. Internal = a[href] whose href is not mailto:/tel:/javascript:/# and whose resolved hostname equals the page hostname exactly. 0 internal links -> -3. Else if content links < 3 AND total internal < 5 -> -1. Generic anchor text on content (non-nav) links -> -0.25 each, max -1. finalScore = max(0, round to 1 decimal); status from unfloored value (>= 3 pass, >= 2 warning, else fail); reported score = floor.",
+    "summary": "Start at 4. Internal = a[href] whose href is not mailto:/tel:/javascript:/# and whose resolved http(s) hostname equals the page hostname ignoring a leading 'www.' (page URL from the site base URL; relative links are always internal). 0 internal links -> -3. Else if content links < 3 AND total internal < 5 -> -1. Generic anchor text on content (non-nav) links -> -0.25 each, max -1. Anchor text falls back to aria-label, img alt, then title when the link has no text. Score = max(0, round to 1 decimal); the engine floors it. Broken targets are not checked here (see /aeotester:links).",
     "rules": [
       {
         "step": "internal link",
-        "condition": "href attribute (raw) not starting with 'mailto:', 'tel:', 'javascript:' or '#', and new URL(href, window.location.origin).hostname === window.location.hostname (exact, so www vs apex differ; subdomains are external)"
+        "condition": "href attribute (trimmed) not starting with 'mailto:', 'tel:', 'javascript:' or '#', and new URL(href, pageUrl) is http(s) with hostname equal to the page hostname after stripping a leading 'www.' from both (other subdomains are external). pageUrl uses the site base URL (canonical, og:url, sitemap, CNAME, config) or a placeholder host, so relative links are always internal."
       },
       {
         "step": "nav vs content",
@@ -23,7 +23,7 @@
       },
       {
         "step": "generic anchor",
-        "condition": "text = innerText trimmed lowercased; generic if length < 2 (includes empty, e.g. image-only links) or matches exactly one of: 'click here', 'here', 'read more', 'more', 'link', 'learn more', 'this', 'this link', 'click', 'go', 'see more', 'view', 'details', 'info', '→', '»', '>'"
+        "condition": "text = visible text (innerText approximation) trimmed and lowercased, or when empty: aria-label, then the first non-empty img alt, then title; generic if length < 2 or exactly one of: 'click here', 'here', 'read more', 'more', 'link', 'learn more', 'this', 'this link', 'click', 'go', 'see more', 'view', 'details', 'info'"
       },
       {
         "condition": "total internal links === 0",
@@ -43,16 +43,16 @@
       },
       {
         "step": "final",
-        "condition": "finalScore = max(0, round(score*10)/10); reported score = floor(finalScore)"
+        "condition": "score = max(0, round(score*10)/10); the engine floors it"
       }
     ],
-    "status_mapping": "Based on unfloored finalScore: >= 3 pass, >= 2 warning, else fail. Reported score = Math.floor(finalScore), e.g. 3.75 -> pass/3, 2.5 -> warning/2, 1 (no links) -> fail/1.",
+    "status_mapping": "Engine rule on the floored score: 4 pass, 2-3 warning, 0-1 fail.",
     "inconclusive": null
   },
   "detect": {
     "method": "script",
     "script": "checks/content/internal-links.mjs",
-    "source_procedure": "Per representative page: 1) Assemble effective HTML: static *.html; Astro layout (src/layouts/*.astro) + page (src/pages/**) + components; Hugo layouts/_default/baseof.html + partials + content Markdown (Markdown links become <a>); Eleventy _includes/** layouts + page content; Next.js app/**/layout.tsx + page.tsx (<Link href> and <a href>), pages router _app/_document + page; Vite SPA components rendering the route. 2) Collect all anchors with href (<a href>, framework <Link href>/<NuxtLink to>, Markdown [text](url)). 3) Classify internal: relative URLs and absolute URLs whose host equals the production host (from site/baseURL in astro.config, hugo.toml baseURL, metadataBase, package homepage, CNAME file); exclude mailto:, tel:, javascript:, '#...'. 4) Mark nav links when inside <nav>, <header>, <footer> or role=navigation (including those in layout partials). 5) Compute visible anchor text (text content excluding alt text) and apply the generic list and length < 2 rule. 6) Apply deductions and thresholds."
+    "source_procedure": "Runs per page on the built HTML in the served root. Collect a[href], classify internal against the page URL built from the site base URL (www and apex are the same site), mark nav links by ancestor nav/header/footer/[role=navigation], compute anchor text (text, else aria-label / img alt / title) and apply the generic list and the count rules. Whether targets exist is out of scope (the /aeotester:links skill does that)."
   },
   "parity": {
     "level": "partial",
@@ -73,5 +73,27 @@
     "links.internal.content_count",
     "links.internal.generic_anchor"
   ],
-  "extension_source": "src/shared/checks/internal-linking-checker.js"
+  "extension_source": "src/shared/checks/internal-linking-checker.js",
+  "divergences": [
+    {
+      "extension": "Image-only links have empty innerText and count as generic anchors even when the image has alt text.",
+      "plugin": "When a link has no text, its aria-label, img alt or title is used as the anchor text.",
+      "reason": "Cards and logos with alt text have descriptive accessible names; penalising them was a false positive."
+    },
+    {
+      "extension": "Hostname must equal window.location.hostname exactly, so www.example.com and example.com are different sites.",
+      "plugin": "A leading 'www.' is ignored on both sides.",
+      "reason": "www and apex are the same site; links between them were miscounted as external."
+    },
+    {
+      "extension": "The page host is the live URL the user is visiting.",
+      "plugin": "The page host comes from the site base URL (canonical, og:url, sitemap, CNAME or framework config); without one, only relative links count as internal.",
+      "reason": "Source-vs-live: the plugin reads the repo and has no live URL."
+    },
+    {
+      "extension": "Status comes from the unfloored score (e.g. 4.5 is pass) while the reported score is floored.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    }
+  ]
 }

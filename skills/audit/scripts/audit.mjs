@@ -8,9 +8,9 @@
 // Reads files under root only. Makes no network requests.
 
 import { writeFileSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { resolve } from 'node:path'
 import { loadSite } from './lib/site.mjs'
-import { runAudit } from './lib/engine.mjs'
+import { runAudit, loadRubric } from './lib/engine.mjs'
 import { renderReport, renderSummary } from './lib/report.mjs'
 
 function parseArgs(argv) {
@@ -35,9 +35,9 @@ const root = resolve(args.root)
 const site = loadSite(root, { maxPages: args.maxPages, baseUrl: args.baseUrl })
 const audit = await runAudit(site, { only: args.only })
 
+const outPath = resolve(root, args.out)
 if (args.report) {
-  const outPath = resolve(root, args.out)
-  writeFileSync(outPath, renderReport(site, audit))
+  writeFileSync(outPath, renderReport(site, audit, { rubric: audit.rubric || loadRubric() }))
 }
 if (args.json) {
   const payload = JSON.stringify({
@@ -52,12 +52,13 @@ if (args.json) {
       totalPages: site.totalPages,
       notes: site.notes
     },
-    ...audit
+    ...audit,
+    rubric: undefined
   }, null, 2)
   if (args.json === '-') process.stdout.write(payload + '\n')
   else writeFileSync(resolve(root, args.json), payload + '\n')
 }
 if (args.json !== '-') {
   console.log(renderSummary(site, audit))
-  if (args.report) console.log(`\nReport: ${join(args.root, args.out)}`)
+  if (args.report) console.log(`\nReport: ${outPath}`)
 }

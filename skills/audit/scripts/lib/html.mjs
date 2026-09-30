@@ -242,7 +242,8 @@ function walkElements(root, fn) {
 const HIDDEN_TEXT_TAGS = new Set(['script', 'style', 'template', 'noscript', 'head', 'title'])
 const BLOCK_TEXT = new Set([...BLOCK_CLOSES_P, 'p', 'li', 'dt', 'dd', 'tr', 'td', 'th', 'caption', 'body', 'html'])
 
-export function visibleText(root) {
+// skip(el) -> true drops an element and its subtree (e.g. boilerplate regions).
+export function visibleText(root, skip = null) {
   let out = ''
   const visit = node => {
     if (node.nodeType === 3) {
@@ -252,6 +253,7 @@ export function visibleText(root) {
     if (node.nodeType !== 1 && node.nodeType !== 9) return
     if (node.nodeType === 1) {
       if (HIDDEN_TEXT_TAGS.has(node.localName)) return
+      if (skip && node !== root && skip(node)) return
       if (node.hasAttribute('hidden') || node.getAttribute('aria-hidden') === 'true') return
       if (/display\s*:\s*none/i.test(node.getAttribute('style') || '')) return
       if (node.localName === 'br') out += '\n'

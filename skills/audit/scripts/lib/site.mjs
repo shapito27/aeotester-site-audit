@@ -251,7 +251,7 @@ export function loadSite(root, options = {}) {
 
   if (stack.id === 'wordpress' || stack.id === 'other-cms') {
     site.mode = 'report-only'
-    site.notes.push('Content lives in a database, so pages cannot be audited from the repo. Only files in the repo are checked.')
+    site.notes.push('Content lives in a database, so pages cannot be audited from the repo. This report is a fix list, not a score.')
   }
 
   if (stack.outputDirs) {
