@@ -1,0 +1,2975 @@
+{
+  "$schema": "./rubric.schema.json",
+  "name": "AEOTester AEO rubric",
+  "version": "1.0.0",
+  "license": "CC-BY-4.0",
+  "attribution": "AEOTester (https://aeotester.com). Reuse requires attribution - see LICENSE-RUBRIC.",
+  "source": {
+    "product": "AEOTester AI Visibility Tool (Chrome extension)",
+    "extension_version": "1.3.1",
+    "commit": "490932c"
+  },
+  "max_score": 138,
+  "scoring": {
+    "check_status": "Each check returns pass | warning | fail | na and a score between 0 and its weight.",
+    "conditional": "A check with conditional: true may return na (not applicable). Its weight is then removed from the denominator, so a plain content site is scored out of max_score minus that weight.",
+    "unreachable": "A check never scores a site down for a resource it could not read (network error, 401/403/429/503, timeout). It returns warning at roughly half weight with inconclusive: true.",
+    "percentage": "round(total_score / available_points * 100), where available_points = max_score minus the weight of na checks.",
+    "grades": [
+      {
+        "min": 90,
+        "label": "Ready for AI"
+      },
+      {
+        "min": 80,
+        "label": "Nearly Optimized"
+      },
+      {
+        "min": 70,
+        "label": "Needs Work"
+      },
+      {
+        "min": 60,
+        "label": "Major Gaps"
+      },
+      {
+        "min": 0,
+        "label": "Not AEO Ready"
+      }
+    ]
+  },
+  "stacks": {
+    "static-html": {
+      "fix": "auto",
+      "detect": "HTML files in the repo root, public/, dist/ or site/ with no framework config"
+    },
+    "astro": {
+      "fix": "auto",
+      "detect": "astro.config.* present"
+    },
+    "hugo": {
+      "fix": "auto",
+      "detect": "hugo.toml, hugo.yaml, config.toml with Hugo keys, or a layouts/ + content/ pair"
+    },
+    "eleventy": {
+      "fix": "auto",
+      "detect": ".eleventy.js, eleventy.config.* or @11ty/eleventy in package.json"
+    },
+    "vite-spa": {
+      "fix": "auto",
+      "detect": "vite.config.* with a root index.html; crawlability warnings apply"
+    },
+    "nextjs": {
+      "fix": "assisted",
+      "detect": "next.config.* or next in package.json"
+    },
+    "wordpress": {
+      "fix": "report-only",
+      "detect": "wp-config.php, wp-content/ or a theme/plugin repo"
+    },
+    "other-cms": {
+      "fix": "report-only",
+      "detect": "content stored outside the repo (database-backed CMS)"
+    }
+  },
+  "categories": [
+    {
+      "id": "ai-access",
+      "name": "AI crawler access",
+      "description": "Whether AI crawlers are allowed in and told how they may use the content.",
+      "max": 21
+    },
+    {
+      "id": "crawlability",
+      "name": "Crawlability and indexing",
+      "description": "Whether the page can be found, fetched and indexed at all.",
+      "max": 18
+    },
+    {
+      "id": "structured-data",
+      "name": "Structured data",
+      "description": "JSON-LD schema that lets AI engines extract facts reliably.",
+      "max": 20
+    },
+    {
+      "id": "meta",
+      "name": "Meta and social tags",
+      "description": "Title, description, social cards, language and viewport.",
+      "max": 22
+    },
+    {
+      "id": "content",
+      "name": "Content structure and quality",
+      "description": "Headings, depth, freshness, authorship, alt text, linking and accessibility.",
+      "max": 36
+    },
+    {
+      "id": "agent-readiness",
+      "name": "Agent readiness",
+      "description": "Whether an AI agent (not just a search engine) can read and act on the page.",
+      "max": 21
+    }
+  ],
+  "checks": [
+    {
+      "id": "ai-access.bot-crawlability",
+      "extension_key": "aiBotCrawlability",
+      "name": "AI Bot Crawlability",
+      "category": "ai-access",
+      "weight": 12,
+      "conditional": false,
+      "description": "Parses the origin's robots.txt and tests, for each of the 126 AI crawler user-agent tokens in the bundled ai-robots-txt list, whether that bot may crawl the current page path. If AI crawlers are blocked they cannot fetch the page, so it cannot be cited or used by AI search and assistants.",
+      "inputs": [
+        "robots.txt at site root (HTTP GET <origin>/robots.txt)",
+        "current page URL path",
+        "src/data/robots.json (bundled AI bot list, 126 keys)"
+      ],
+      "scoring": {
+        "summary": "robots.txt missing (any non-2xx, including unreachable) gives warning 8/12. An empty (whitespace-only) robots.txt gives pass 12/12. Otherwise every bot name in robots.json is evaluated with RobotsParser.canBotCrawlPath(botName, pathname); score = round(allowedCount / totalBots * 12). If any ALLOWED bot has an effective crawl-delay > 5, subtract 2 (floor 0). Status is pass only if all bots are allowed and no delay warnings; warning if allowedCount > blockedCount; otherwise fail. There is no prioritization or weighting of bots: all 126 count equally.",
+        "rules": [
+          {
+            "condition": "robots.txt fetch not ok (ctx.getRobotsTxt() returns null: 404, 403, 429, 503, 5xx, timeout, network error)",
+            "status": "warning",
+            "points": 8,
+            "message": "robots.txt not found - all bots allowed by default"
+          },
+          {
+            "condition": "robots.txt body is empty after trim()",
+            "status": "pass",
+            "points": 12
+          },
+          {
+            "condition": "bot list failed to load (aiBots.length === 0; unreachable in practice because loadBotList falls back to a 5-bot list on error)",
+            "status": "warning",
+            "points": 6
+          },
+          {
+            "condition": "parser: lines split on \\n, trimmed; blank lines and lines starting with # skipped; directive prefixes matched case-insensitively: 'user-agent:', 'disallow:', 'allow:', 'crawl-delay:' (parseInt), 'sitemap:'. Empty Disallow/Allow values are ignored. Inline comments after values are NOT stripped.",
+            "points": "n/a"
+          },
+          {
+            "condition": "parser group handling: each User-agent line sets currentAgent; rules are attached only to the LAST user-agent line before them. 'User-agent: *' goes to global. Consecutive User-agent lines (a grouped record) leave earlier agents with an empty rule set, which means allowed.",
+            "points": "n/a"
+          },
+          {
+            "condition": "rule selection: rules.botSpecific[botName] with EXACT, case-sensitive key match on the token written in robots.txt; if absent, the global (*) rules are used. A bot-specific group completely replaces global Allow/Disallow.",
+            "points": "n/a"
+          },
+          {
+            "condition": "path match: Allow patterns checked first, any match => allowed; then Disallow patterns, any match => blocked; no match => allowed. No longest-match precedence. Pattern '/' matches every path. '*' => '.*', '?' => '.', trailing '$' anchors end; regex anchored at start. Path tested is URL.pathname only (no query string).",
+            "points": "n/a"
+          },
+          {
+            "condition": "crawl delay: effective delay = botRules.crawlDelay || global.crawlDelay || null (global delay applies even to bots with their own group). Only counted for allowed bots; delay > 5 seconds adds a delay warning.",
+            "points": "n/a"
+          },
+          {
+            "condition": "base score",
+            "points": "Math.round((allowedCount / totalBots) * 12)"
+          },
+          {
+            "condition": "one or more allowed bots have crawl-delay > 5",
+            "points": "-2 (once, floor 0)"
+          },
+          {
+            "condition": "allowedCount === totalBots AND no delay warnings",
+            "status": "pass"
+          },
+          {
+            "condition": "else allowedCount > blockedCount",
+            "status": "warning"
+          },
+          {
+            "condition": "else",
+            "status": "fail"
+          }
+        ],
+        "bot_list": {
+          "source": "src/data/robots.json (ai-robots-txt/ai.robots.txt), keys of the top-level object, loaded via utils.loadBotList() and cached in chrome.storage.local under botListVersion '1.0.0'",
+          "count": 126,
+          "prioritized": "none - every bot has equal weight in allowedCount/totalBots",
+          "fallback_if_load_fails": [
+            "GPTBot",
+            "ChatGPT-User",
+            "Google-Extended",
+            "claudebot",
+            "Amazonbot"
+          ],
+          "names": "AddSearchBot, AI2Bot, AI2Bot-DeepResearchEval, Ai2Bot-Dolma, aiHitBot, amazon-kendra, Amazonbot, AmazonBuyForMe, Andibot, Anomura, anthropic-ai, Applebot, Applebot-Extended, atlassian-bot, Awario, bedrockbot, bigsur.ai, Bravebot, Brightbot 1.0, BuddyBot, Bytespider, CCBot, ChatGLM-Spider, ChatGPT Agent, ChatGPT-User, Claude-SearchBot, Claude-User, Claude-Web, ClaudeBot, Cloudflare-AutoRAG, CloudVertexBot, cohere-ai, cohere-training-data-crawler, Cotoyogi, Crawlspace, Datenbank Crawler, DeepSeekBot, Devin, Diffbot, DuckAssistBot, Echobot Bot, EchoboxBot, FacebookBot, facebookexternalhit, Factset_spyderbot, FirecrawlAgent, FriendlyCrawler, Gemini-Deep-Research, Google-CloudVertexBot, Google-Extended, Google-Firebase, Google-NotebookLM, GoogleAgent-Mariner, GoogleOther, GoogleOther-Image, GoogleOther-Video, GPTBot, iAskBot, iaskspider, iaskspider/2.0, IbouBot, ICC-Crawler, ImagesiftBot, imageSpider, img2dataset, ISSCyberRiskCrawler, Kangaroo Bot, KlaviyoAIBot, KunatoCrawler, laion-huggingface-processor, LAIONDownloader, LCC, LinerBot, Linguee Bot, LinkupBot, Manus-User, meta-externalagent, Meta-ExternalAgent, meta-externalfetcher, Meta-ExternalFetcher, meta-webindexer, MistralAI-User, MistralAI-User/1.0, MyCentralAIScraperBot, netEstate Imprint Crawler, NotebookLM, NovaAct, OAI-SearchBot, omgili, omgilibot, OpenAI, Operator, PanguBot, Panscient, panscient.com, Perplexity-User, PerplexityBot, PetalBot, PhindBot, Poggio-Citations, Poseidon Research Crawler, QualifiedBot, QuillBot, quillbot.com, SBIntuitionsBot, Scrapy, SemrushBot-OCOB, SemrushBot-SWA, ShapBot, Sidetrade indexer bot, Spider, TerraCotta, Thinkbot, TikTokSpider, Timpibot, VelenPublicWebCrawler, WARDBot, Webzio-Extended, webzio-extended, wpbot, WRTNBot, YaK, YandexAdditional, YandexAdditionalBot, YouBot, ZanistaBot"
+        },
+        "status_mapping": "Explicit: pass iff all bots allowed and no crawl-delay > 5; warning if allowed > blocked; else fail. Early exits: missing robots.txt = warning/8, empty robots.txt = pass/12.",
+        "inconclusive": "Not implemented. The check uses ctx.getRobotsTxt() only, so an unreachable robots.txt (0/403/429/503/timeout) is treated exactly like a 404: warning, 8 points, message 'robots.txt not found'. No details.inconclusive flag."
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/ai-access/bot-crawlability.mjs",
+        "source_procedure": "1) Locate the robots.txt that will be served at the site root: static HTML / Vite / Next.js: public/robots.txt (or root robots.txt for plain static); Astro: public/robots.txt or src/pages/robots.txt.ts (generated - evaluate the returned string if literal, otherwise flag); Hugo: static/robots.txt, or layouts/robots.txt when enableRobotsTXT = true in hugo.toml/config.toml (default Hugo template is 'User-agent: *' only); Eleventy: robots.txt passthrough copy in .eleventy.js or a robots.njk/robots.11ty.js template; Next.js app router: app/robots.ts|js (MetadataRoute.Robots object - convert rules to text) or app/robots.txt. 2) If none exists, score warning/8. If it exists but is whitespace-only, pass/12. 3) Otherwise reproduce the parser exactly (last-user-agent-wins grouping bug, case-sensitive exact token match, Allow-before-Disallow, global crawl-delay inheritance) and evaluate all 126 names from robots.json against the page path being audited (use '/' for the site-level audit, or each page's route path). 4) Compute round(allowed/126*12), minus 2 if any allowed bot's effective crawl-delay > 5; derive status."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Full parity when robots.txt is a static file in the repo. Differences: host-generated or CDN-managed robots.txt (Cloudflare 'AI Scrapers and Crawlers' managed robots.txt, Vercel/Netlify rewrites, WordPress virtual robots.txt) is invisible in source; dynamic generators (Next.js robots.ts, Astro endpoints) need evaluation; an SPA fallback that serves index.html with 200 for /robots.txt would be parsed by the extension as a non-empty file with no directives (pass 12) while source shows no file (warning 8); the extension also scores a WAF-blocked robots.txt as missing. Per-page path results differ only if Disallow rules target specific paths."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/ai-access.bot-crawlability.md",
+      "fix_summary": "Create or edit robots.txt so AI crawlers are allowed (e.g. remove 'Disallow: /' under AI bot groups, avoid Crawl-delay > 5), or add an empty/permissive 'User-agent: *\\nAllow: /' file. Place it at public/robots.txt (Vite, Next.js, Astro), static/robots.txt (Hugo), a passthrough file (Eleventy) or site root (static HTML); for Next.js app/robots.ts edit the rules array. Write one User-agent line per group to avoid the extension's grouping bug.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "robots.present",
+        "robots.empty",
+        "robots.ai_bots.allowed_ratio",
+        "robots.ai_bots.blocked_list",
+        "robots.crawl_delay.excessive"
+      ],
+      "extension_source": "src/shared/checks/ai-bot-crawlability.js"
+    },
+    {
+      "id": "ai-access.llms-txt",
+      "extension_key": "llmsTxt",
+      "name": "llms.txt Detection",
+      "category": "ai-access",
+      "weight": 6,
+      "conditional": false,
+      "description": "Checks for an /llms.txt file at the site root (llmstxt.org proposal), that it is non-trivial, not blocked by robots.txt, and follows the spec shape (H1 title plus markdown links). llms.txt gives AI assistants and agents a curated, navigable index of the site's key content. /llms-full.txt is detected but not scored.",
+      "inputs": [
+        "GET <origin>/llms.txt (status, body)",
+        "GET <origin>/llms-full.txt (existence only, informational)",
+        "robots.txt (User-agent: * group only)"
+      ],
+      "scoring": {
+        "summary": "If /llms.txt is not response.ok -> fail 0. Otherwise start at 5 (baseScore): empty file -3, else < 50 chars -1; blocked for User-agent * by robots.txt -2; +1 if format valid (first non-empty line is '# Title' AND at least one markdown link). Clamp to 0..6. Status: >= 5 pass, >= 2 warning, else fail.",
+        "rules": [
+          {
+            "condition": "GET /llms.txt (timeout 2500 ms) not ok (any non-2xx, including 403/429/503/timeout/network error)",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "file length (JS string length of body) === 0",
+            "points": "-3"
+          },
+          {
+            "condition": "else file length < 50",
+            "points": "-1"
+          },
+          {
+            "condition": "robots.txt exists and path '/llms.txt' not allowed by the User-agent: * group (RobotsParser.isPathAllowed on rules.global: any matching Allow wins first, then any matching Disallow blocks; patterns support * and $, '?' treated as single-char wildcard)",
+            "points": "-2"
+          },
+          {
+            "condition": "file length > 10000",
+            "points": "0",
+            "note": "issue text only, no penalty"
+          },
+          {
+            "step": "format validation",
+            "condition": "hasH1 = first non-empty line (trimmed) matches /^#\\s+\\S/ ; linkCount = matches of /\\[[^\\]]+\\]\\([^)]+\\)/g ; valid = hasH1 AND linkCount > 0. hasSummary (/^>\\s+\\S/m) and sectionCount (/^##\\s+/gm) are informational."
+          },
+          {
+            "condition": "format valid",
+            "points": "+1"
+          },
+          {
+            "condition": "format invalid and file non-empty",
+            "points": "0",
+            "note": "format issues added to message only"
+          },
+          {
+            "step": "clamp",
+            "condition": "finalScore = max(0, min(6, score))"
+          },
+          {
+            "condition": "/llms-full.txt response.ok",
+            "points": "0",
+            "note": "informational; recommendation suggests adding it when absent"
+          },
+          {
+            "condition": "exception thrown (e.g. body undefined)",
+            "status": "fail",
+            "points": 0
+          }
+        ],
+        "status_mapping": "finalScore >= 5 pass, >= 2 warning, else fail. Typical: valid file 6 pass; exists but no H1/links 5 pass; short (< 50) valid 5 pass; blocked by robots 3 or 4 warning; empty file 2 warning; not found 0 fail.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/ai-access/llms-txt.mjs",
+        "source_procedure": "1) Look for llms.txt served at the site root: static root/llms.txt; Astro public/llms.txt or src/pages/llms.txt.ts (endpoint) or an llms.txt integration in astro.config.*; Hugo static/llms.txt or an output format/template (layouts/index.llms.txt, outputFormats in hugo.toml); Eleventy passthrough-copied llms.txt or llms.txt.njk/.liquid with permalink /llms.txt; Next.js public/llms.txt or app/llms.txt/route.ts; Vite public/llms.txt. 2) Not found -> 0 fail. 3) Read (or render) the file: length 0 -> -3, length < 50 -> -1. 4) Parse robots.txt (see source locations for robots.txt) using the User-agent: * group only and test '/llms.txt' with Allow-first then Disallow prefix/wildcard matching -> -2 if blocked. 5) Validate format: first non-empty line '# X' and at least one [text](url) link -> +1. 6) Clamp 0..6, map status. 7) Also report whether llms-full.txt exists (no score)."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Hosts can serve a 200 HTML fallback for unknown paths (SPA rewrites in _redirects, vercel.json, netlify.toml): the extension would then count /llms.txt as found with base 5 (pass) even though no file exists; source analysis should report absent. Conversely, WAF/bot protection returning 403 makes the extension fail where source shows the file. Generated llms.txt (endpoints, plugins, CMS) must be rendered to measure. Cloudflare-managed or CDN-level robots.txt changes are not visible in source."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/ai-access.llms-txt.md",
+      "fix_summary": "Generate an llms.txt at the public root (public/ for Astro/Next/Vite, static/ for Hugo, passthrough for Eleventy, repo root for static sites) with '# Site Name', a '> summary' line and '## Section' lists of [Title](url): description links built from the sitemap/pages; optionally also llms-full.txt. Ensure robots.txt does not Disallow /llms.txt for User-agent: *.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "llms.txt.present",
+        "llms.txt.size",
+        "llms.txt.robots_allowed",
+        "llms.txt.format.h1",
+        "llms.txt.format.links",
+        "llms.full.present"
+      ],
+      "extension_source": "src/shared/checks/llms-txt-checker.js"
+    },
+    {
+      "id": "ai-access.content-signals",
+      "extension_key": "contentSignals",
+      "name": "Content Signals",
+      "category": "ai-access",
+      "weight": 3,
+      "conditional": false,
+      "description": "Checks whether the site declares Content Signals (search, ai-input, ai-train = yes/no) in robots.txt or in a Content-Signal response header. robots.txt only says whether a crawler may fetch; Content Signals state what AI companies may do with the content (index it, ground answers on it, train on it).",
+      "inputs": [
+        "robots.txt (text and raw response)",
+        "HTTP response headers of the page (plain GET)",
+        "HTTP response headers of the page requested with Accept: text/markdown, text/html;q=0.9",
+        "AI bot list: keys of src/data/robots.json (ai-robots-txt project)"
+      ],
+      "scoring": {
+        "summary": "If robots.txt, the page and the Markdown-negotiated page were ALL unreachable -> warning 2 (inconclusive). Otherwise, parse Content-Signal lines in robots.txt and the content-signal header (page response first, else markdown response). If at least one recognised key=value pair is found in either -> pass 3. Else if robots.txt has a User-agent line naming any known AI bot -> warning 1. Else fail 0.",
+        "rules": [
+          {
+            "condition": "isUnreachable(robotsResponse) AND isUnreachable(pageResponse) AND isUnreachable(markdownResponse) (status 0/403/429/503 or timedOut; a null robots response counts as unreachable)",
+            "status": "warning",
+            "points": 2,
+            "inconclusive": true
+          },
+          {
+            "step": "robots.txt parsing",
+            "condition": "robots.txt text only when response.ok. Lines matching /^[ \\t]*content-signal[ \\t]*:[ \\t]*(.+)$/gim anywhere in the file (independent of User-agent groups). Later lines override earlier keys (Object.assign)."
+          },
+          {
+            "step": "value parsing",
+            "condition": "split on ','; each part split on '='; key trimmed/lowercased must be one of [search, ai-input, ai-train]; value trimmed/lowercased must be exactly 'yes' or 'no'. Other pairs ignored."
+          },
+          {
+            "step": "header",
+            "condition": "content-signal header (case-insensitive) from the plain page response; if absent, from the Accept: text/markdown response. Parsed with the same value parser."
+          },
+          {
+            "step": "combine",
+            "condition": "combined = {...headerSignals, ...robotsSignals} (robots wins on conflicts). source = both | robots | header when the respective parsed object is non-empty."
+          },
+          {
+            "condition": "at least one valid signal parsed from robots.txt or header",
+            "status": "pass",
+            "points": 3
+          },
+          {
+            "condition": "no valid signals, and robots.txt has a line matching /^[ \\t]*user-agent[ \\t]*:[ \\t]*<bot>[ \\t]*$/im (case-insensitive, exact bot name) for any bot in the AI bot list",
+            "status": "warning",
+            "points": 1
+          },
+          {
+            "condition": "otherwise (including no robots.txt / robots 404, or robots unreachable but page reachable)",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "exception thrown",
+            "status": "fail",
+            "points": 0
+          }
+        ],
+        "status_mapping": "Explicit per branch: pass=3, warning=1 (AI bots addressed, no signals), warning=2 (all three requests unreachable), fail=0.",
+        "inconclusive": "Only when all three requests (robots.txt, page GET, Markdown GET) are unreachable: warning, score 2 of 3, details.inconclusive true. If robots.txt alone is unreachable but the page responded without a header, the check proceeds and can fail with 0."
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/ai-access/content-signals.mjs",
+        "source_procedure": "1) Find robots.txt: static root/robots.txt; Astro public/robots.txt or src/pages/robots.txt.ts; Hugo static/robots.txt or layouts/robots.txt with enableRobotsTXT in hugo.toml/config.toml; Eleventy passthrough robots.txt or robots.njk with permalink; Next.js public/robots.txt or app/robots.ts (MetadataRoute.Robots has no Content-Signal field, so check for a static file or a route handler); Vite public/robots.txt. Also check framework plugins (e.g. astro-robots-txt config). 2) Apply the exact content-signal regex and value parser to the (rendered, if generated) robots.txt text. 3) Look for a Content-Signal header in host config: _headers (Cloudflare Pages/Netlify), netlify.toml [[headers]], vercel.json headers, Next.js next.config.* headers(), middleware.ts, server code. Parse with the same parser. 4) If none, test robots.txt for User-agent lines whose value exactly equals (case-insensitive) a key in the ai-robots-txt robots.json list. 5) Score.",
+        "llm_criteria": "Only for generated robots.txt or header code paths (template logic, env-dependent output): decide what literal robots.txt text and response headers production would emit, then apply the rules mechanically."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Hosts and CDNs can add robots.txt content or the Content-Signal header outside the repo (notably Cloudflare managed robots.txt, which injects Content-Signal lines, and Cloudflare Markdown for Agents which sets the header on markdown responses). Generated robots.txt may depend on env vars. The unreachable branch cannot be reproduced from source."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/ai-access.content-signals.md",
+      "fix_summary": "Add a line such as 'Content-Signal: search=yes, ai-input=yes, ai-train=no' to robots.txt (public/robots.txt for Astro/Next/Vite, static/robots.txt for Hugo, root or passthrough for static/Eleventy, or the generator for app/robots.ts and Hugo robots templates). The yes/no values are a policy choice, so the plugin should propose defaults and let the user confirm; optionally also add a Content-Signal header via _headers, netlify.toml or vercel.json.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "content.signals.robots",
+        "content.signals.header",
+        "content.signals.ai_bots_addressed"
+      ],
+      "extension_source": "src/shared/checks/content-signals-checker.js"
+    },
+    {
+      "id": "crawlability.indexability",
+      "extension_key": "indexability",
+      "name": "Indexability",
+      "category": "crawlability",
+      "weight": 8,
+      "conditional": false,
+      "description": "Checks the page-level signals that decide whether search and AI engines may index it: the canonical link, meta robots / bot-specific meta noindex, nofollow or none directives, and a soft-404 heuristic. A page that is noindexed, canonicalized to another domain or looks like an error page will not be surfaced or cited by AI search.",
+      "inputs": [
+        "page HTML <head>: link[rel=\"canonical\"]",
+        "page HTML <head>: meta[name=\"robots\"] and any meta whose name contains 'bot' (case-insensitive)",
+        "page <title>",
+        "rendered visible text of main content and of body (innerText)",
+        "current page URL"
+      ],
+      "scoring": {
+        "summary": "Three sub-checks run first. If any critical issue exists (a noindex/none directive, a soft 404, or a canonical on a different hostname) the check fails with 0. Otherwise score = 8 minus the canonical penalty (none 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0.",
+        "rules": [
+          {
+            "condition": "canonical: no link[rel=\"canonical\"]",
+            "points": "-1",
+            "canonical_status": "warning"
+          },
+          {
+            "condition": "canonical: more than one link[rel=\"canonical\"]",
+            "points": "-3",
+            "canonical_status": "fail"
+          },
+          {
+            "condition": "canonical: exactly one, and new URL(canonical.href).hostname !== new URL(currentUrl).hostname (www vs apex counts as different)",
+            "status": "fail",
+            "points": 0,
+            "critical": true,
+            "message": "Canonical points to different domain (critical issue)"
+          },
+          {
+            "condition": "canonical: exactly one, same hostname, normalizeUrl(canonical) === normalizeUrl(current). normalizeUrl = protocol//hostname+pathname+search, strip ONE trailing '/', lowercase; drops port and #fragment, keeps query string",
+            "points": "0",
+            "canonical_status": "pass"
+          },
+          {
+            "condition": "canonical: exactly one, same hostname, normalized URLs differ (different path, query, or http vs https)",
+            "points": "-2",
+            "canonical_status": "warning"
+          },
+          {
+            "condition": "noindex: first meta[name=\"robots\"] content (lowercased) contains substring 'none' OR 'noindex'; OR any meta[name*=\"bot\" i] (e.g. robots, googlebot, bingbot, GPTBot) content contains 'none' or 'noindex'",
+            "status": "fail",
+            "points": 0,
+            "critical": true,
+            "message": "Page has noindex directive"
+          },
+          {
+            "condition": "nofollow: same metas, content contains 'nofollow' or 'none' (and no noindex, otherwise critical already)",
+            "points": "-2"
+          },
+          {
+            "condition": "soft404 signal A: document.title lowercased contains any of '404', 'not found', 'page not found', 'error', 'no encontrado', 'nicht gefunden'",
+            "points": "signal"
+          },
+          {
+            "condition": "soft404 signal B: word count of main content < 200. Main content = innerText of first match of 'main, article, [role=\"main\"], .content, #content'; fallback body innerText with nav, footer, header, aside, script, style, noscript removed. Words = split on /\\s+/",
+            "points": "signal"
+          },
+          {
+            "condition": "soft404 signal C: first 1000 chars of body innerText (lowercased) contain 'page not found' or '404'",
+            "points": "signal"
+          },
+          {
+            "condition": "soft404: 2 or more of signals A/B/C",
+            "status": "fail",
+            "points": 0,
+            "critical": true,
+            "message": "Soft 404 detected"
+          },
+          {
+            "condition": "no critical issue",
+            "points": "max(0, 8 - canonicalPenalty - (hasNofollow ? 2 : 0))"
+          }
+        ],
+        "status_mapping": "Any critical issue: fail with 0. Otherwise score >= 6 pass, >= 4 warning, else fail. Reachable non-critical outcomes: 8, 7 (no canonical), 6 (other URL, or nofollow), 5 (multiple canonicals or no canonical + nofollow), 4, 3.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/crawlability/indexability.mjs",
+        "source_procedure": "Per page template/route: 1) Canonical: find <link rel=\"canonical\"> in static *.html; Astro layouts (often href={Astro.url} or new URL(Astro.url.pathname, Astro.site)); Hugo baseof/head partials ({{ .Permalink }}) plus baseURL in hugo.toml; Eleventy _includes layouts with page.url and site url data; Next.js app router metadata.alternates.canonical (and metadataBase) in app/**/layout.tsx/page.tsx, pages router next/head; Vite SPA index.html. Count occurrences in the composed head (layout + page + SEO components; plugins like @astrojs/sitemap do not add canonicals but next-seo/astro-seo do). Compare the resolved host with the production host (from site/baseURL/metadataBase/vercel or netlify config/CNAME); treat www vs apex mismatch as critical. 2) Robots meta: grep for <meta name=\"robots\"|googlebot|bingbot|...bot> and Next.js metadata.robots ({index:false} renders noindex, {follow:false} renders nofollow); flag substrings noindex, none, nofollow exactly as the extension does (including max-image-preview:none, which contains 'none'). Watch for env-conditional noindex (e.g. noindex on preview builds) and note it. 3) Soft 404: compute title keywords and approximate main-content word count from built HTML (main/article/[role=main]/.content/#content, else body minus nav/footer/header/aside/script/style/noscript), and check the first 1000 chars of visible body text for '404' or 'page not found'. Best done on build output; otherwise let a model estimate word count from template + content files.",
+        "llm_criteria": "Only for soft-404 when output HTML is unavailable: estimate whether the visible main content of the page has fewer than 200 words, whether the <title> contains 404/not found/error/no encontrado/nicht gefunden (substring, so 'Error handling guide' counts), and whether the first ~1000 characters of visible body text contain '404' or 'page not found' (this includes phone numbers or prices containing 404). Soft 404 = at least 2 of the 3."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Canonical and meta robots are usually exact from templates or metadata exports, but host resolution depends on the production domain, and values injected by JS (SPA route changes, SEO plugins, tag managers) or CMS are invisible in source. Extension compares canonical against the actual visited URL (including http/https, query strings and trailing slash rules), which source can only approximate. Soft-404 depends on rendered innerText and word counts, which source can only estimate without a build. X-Robots-Tag headers are NOT part of this check (see httpBehavior)."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/crawlability.indexability.md",
+      "fix_summary": "Emit exactly one self-referencing absolute canonical per page on the production host (Astro layout <link rel=\"canonical\" href={new URL(Astro.url.pathname, Astro.site)}>, Hugo {{ .Permalink }}, Eleventy site.url + page.url, Next.js metadataBase + alternates.canonical), and remove noindex/nofollow/none from production robots meta (Next.js metadata.robots). Soft-404 fixes (thin content, error words in titles) need user content and are assisted.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "index.canonical.present",
+        "index.canonical.single",
+        "index.canonical.same_host",
+        "index.canonical.self_referencing",
+        "index.robots_meta.noindex",
+        "index.robots_meta.nofollow",
+        "index.soft404"
+      ],
+      "extension_source": "src/shared/checks/indexability-checker.js"
+    },
+    {
+      "id": "crawlability.sitemap",
+      "extension_key": "sitemap",
+      "name": "Sitemap Detection",
+      "category": "crawlability",
+      "weight": 5,
+      "conditional": false,
+      "description": "Probes common sitemap locations at the site root, checks that the sitemap contains URLs and that robots.txt declares a Sitemap. Sitemaps let AI crawlers and search engines discover and refresh all pages rather than relying on link crawling.",
+      "inputs": [
+        "GET {origin}/sitemap.xml, /sitemap_index.xml, /sitemap-index.xml, /sitemap1.xml (sequential, first response.ok wins, no timeout)",
+        "robots.txt via AnalysisContext.getRobotsTxt()",
+        "current page URL"
+      ],
+      "scoring": {
+        "summary": "Probe the four locations in order; if none returns HTTP 2xx: fail, 0. Otherwise start at 5: -1 if robots.txt text is unavailable (404 or unreachable), -2 if robots.txt does not contain the substring \"sitemap:\" (case-insensitive, also applied when robots.txt is missing, so missing robots.txt costs 3), -2 if the sitemap body contains zero \"<loc>\" substrings. Clamp at 0. Possible scores: 5 (all good), 3 (not referenced, or empty), 2 (no robots.txt), 1 (not referenced and empty), 0 (no robots.txt and empty, or no sitemap).",
+        "rules": [
+          {
+            "id": "sitemap.exists",
+            "condition": "none of /sitemap.xml, /sitemap_index.xml, /sitemap-index.xml, /sitemap1.xml returns response.ok (2xx after following redirects)",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "id": "sitemap.robots_present",
+            "condition": "getRobotsTxt() returns null (robots.txt non-2xx, including 404 and unreachable)",
+            "points": "-1"
+          },
+          {
+            "id": "sitemap.robots_reference",
+            "condition": "robots.txt missing OR lowercase robots.txt does not include \"sitemap:\"",
+            "points": "-2",
+            "note": "Any Sitemap: line counts, even if it points to a different URL than the one found."
+          },
+          {
+            "id": "sitemap.has_urls",
+            "condition": "count of literal \"<loc>\" substrings in sitemap body == 0",
+            "points": "-2"
+          },
+          {
+            "id": "sitemap.contains_current_page",
+            "condition": "sitemap body does not include the exact current URL string and body lacks \"<sitemapindex\"",
+            "points": 0,
+            "note": "informational only, no penalty"
+          },
+          {
+            "id": "sitemap.is_index",
+            "condition": "body includes \"<sitemapindex\"",
+            "points": 0,
+            "note": "informational; child sitemaps are not fetched, <loc> count includes index entries"
+          }
+        ],
+        "status_mapping": "score >= 5 -> pass; score >= 2 -> warning; else fail.",
+        "inconclusive": "Not implemented. Sitemap probes do not use isUnreachable: a 403/429/503/timeout on every location is scored as \"No sitemap.xml found\" (fail 0), and an unreachable robots.txt is penalized the same as a 404 (-3). This contradicts the project rule in CLAUDE.md."
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/crawlability/sitemap.mjs",
+        "source_procedure": "Static: look for a sitemap file served at the root: public/sitemap.xml, static/sitemap.xml, root sitemap.xml (static HTML), sitemap_index.xml, sitemap-index.xml, sitemap1.xml. Generated sitemaps: Astro @astrojs/sitemap in astro.config.* integrations (emits sitemap-index.xml and sitemap-0.xml; requires site set, else it emits nothing); Hugo generates sitemap.xml by default unless disableKinds contains \"sitemap\" (check hugo.toml/config.toml); Eleventy: a sitemap.njk/sitemap.xml.* template with permalink /sitemap.xml or @quasibit/eleventy-plugin-sitemap; Next.js app router: app/sitemap.ts|js|xml (serves /sitemap.xml), pages router: next-sitemap config/postbuild or pages/sitemap.xml.*; Vite SPA: public/sitemap.xml or a vite sitemap plugin (vite-plugin-sitemap). Also check host redirects/rewrites (_redirects, vercel.json, netlify.toml) that map one of the four paths. If the sitemap is generated with a non-probed name only (e.g. only /sitemap-0.xml), it is NOT found by the extension. Empty check: static file has at least one <loc>; generators with at least one page count as non-empty. robots.txt: public/robots.txt, static/robots.txt, root robots.txt, Next.js app/robots.ts (sitemap field), astro-robots-txt integration, Hugo enableRobotsTXT + layouts/robots.txt; check presence and a case-insensitive \"Sitemap:\" line.",
+        "llm_criteria": "Model judges whether a generator config will actually emit a file at one of the four probed paths (e.g. Astro sitemap without site config, conditional Next.js sitemap routes, Hugo disableKinds) and whether the generated sitemap would contain at least one URL."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Static files give full parity. Divergence: generated sitemaps depend on build config; hosting may add, rewrite or block routes (WAF/bot protection returning 403 makes the extension report no sitemap); a CMS or server may serve a sitemap not present in the repo; a SPA fallback that returns index.html with 200 for /sitemap.xml counts as \"found\" in the extension but with 0 <loc> (score 3 or lower); robots.txt may be generated by the host (e.g. Cloudflare managed robots.txt) and differ from the repo."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/crawlability.sitemap.md",
+      "fix_summary": "Add a sitemap at /sitemap.xml or /sitemap-index.xml (Astro @astrojs/sitemap plus site in astro.config, Hugo default sitemap, Next.js app/sitemap.ts, Eleventy sitemap template, public/sitemap.xml for Vite/static) and add \"Sitemap: https://<domain>/sitemap.xml\" to robots.txt (public/robots.txt, static/robots.txt, app/robots.ts). Requires knowing the production domain.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "sitemap.exists",
+        "sitemap.robots_present",
+        "sitemap.robots_reference",
+        "sitemap.has_urls",
+        "sitemap.contains_current_page",
+        "sitemap.is_index"
+      ],
+      "extension_source": "src/shared/checks/sitemap-checker.js"
+    },
+    {
+      "id": "crawlability.https",
+      "extension_key": "security",
+      "name": "SSL / HTTPS",
+      "category": "crawlability",
+      "weight": 2,
+      "conditional": false,
+      "description": "Checks that the page is served over HTTPS and flags mixed content (http: images, scripts, stylesheets, iframes). HTTPS is a basic trust signal for search and AI platforms, and mixed content can be blocked by browsers or agents.",
+      "inputs": [
+        "analyzed page URL protocol",
+        "rendered DOM: img[src], script[src], link[rel=\"stylesheet\"][href], iframe[src]"
+      ],
+      "scoring": {
+        "summary": "If the URL protocol is not https: fail, 0. Otherwise start at 2 and subtract 0.5 if any mixed content is found; reported score is Math.floor, so HTTPS with mixed content gives 1, clean HTTPS gives 2.",
+        "rules": [
+          {
+            "id": "security.https",
+            "condition": "new URL(url).protocol !== \"https:\" (falls back to window.location.protocol if URL parse throws)",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "id": "security.mixed_content",
+            "condition": "any element matches img[src^=\"http:\"], script[src^=\"http:\"], link[rel=\"stylesheet\"][href^=\"http:\"], iframe[src^=\"http:\"] (attribute value prefix, case-sensitive, exact rel value \"stylesheet\")",
+            "status": "warning",
+            "points": "-0.5 -> floor(1.5) = 1"
+          },
+          {
+            "condition": "HTTPS and no mixed content",
+            "status": "pass",
+            "points": 2
+          }
+        ],
+        "status_mapping": "not HTTPS -> fail; HTTPS with any mixed content -> warning; else pass.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/crawlability/https.mjs",
+        "source_procedure": "HTTPS: determine the production URL from config: astro.config.* site, hugo.toml/config.toml baseURL, Eleventy site data (_data/site.json url), Next.js metadataBase / NEXT_PUBLIC_SITE_URL / next-sitemap siteUrl, package.json homepage, CNAME file (GitHub Pages), canonical/og:url values in templates, vercel.json/netlify.toml/_headers/_redirects (HTTPS redirects, HSTS). If the canonical site URL starts with https:// treat as pass-candidate; http:// -> fail; unknown -> report as live-only for this sub-criterion (Vercel, Netlify, Cloudflare Pages and GitHub Pages serve HTTPS by default). Mixed content: grep templates, components and content (*.html, *.astro, *.tsx, *.jsx, *.vue, *.njk, *.liquid, Hugo layouts, markdown) for src=\"http: on img/script/iframe and href=\"http: on link rel=\"stylesheet\" (also JSX src={\"http:...\"} and markdown images ![](http://...), which render to img). Score: not HTTPS 0; HTTPS with any mixed content 1; else 2.",
+        "llm_criteria": "Model decides the production scheme when config is ambiguous (e.g. no site URL, custom domain on a known host) and whether an http: asset reference is actually rendered on the page (not in comments, docs code blocks or dead components)."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The protocol is a property of the deployment, not the repo; source can only infer it from config and host conventions. Mixed content from literal templates matches, but scripts/widgets injected at runtime, CMS content, and http: URLs built dynamically are not visible. Protocol-relative (//) or uppercase (HTTP:) URLs are not flagged by the extension either, so do not flag them."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/crawlability.https.md",
+      "fix_summary": "Rewrite http:// asset URLs in templates/content to https:// (auto-fixable when the asset is available over HTTPS) and set the site URL config to https (astro site, Hugo baseURL, Next metadataBase). Enabling HTTPS itself (certificate, forced redirect) is host config and report-only unless the host is file-configured (e.g. netlify.toml redirect, vercel defaults).",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "security.https",
+        "security.mixed_content"
+      ],
+      "extension_source": "src/shared/checks/security-checker.js"
+    },
+    {
+      "id": "crawlability.http-behavior",
+      "extension_key": "httpBehavior",
+      "name": "HTTP Behavior",
+      "category": "crawlability",
+      "weight": 3,
+      "conditional": false,
+      "description": "Probes a random non-existent URL to verify the site returns a real 404/410 (not a soft 404), verifies the current page returns HTTP 200 to a plain fetch, and checks that no X-Robots-Tag response header contains noindex or none. Agents rely on status codes and headers to know whether a fetch succeeded and whether content may be used.",
+      "inputs": [
+        "HTTP GET of a random probe URL: <origin>/aeo-checker-404-probe-<8 random base36 chars> (2500 ms timeout, redirects followed)",
+        "HTTP GET of the current page (shared AnalysisContext page response, 3000 ms timeout, redirects followed)",
+        "HTTP response header X-Robots-Tag of the current page"
+      ],
+      "scoring": {
+        "summary": "Three independent criteria, 1 point each. Probe: +1 if the final status is 404 or 410, or if the probe was inconclusive (status 0, 403, 429, 503, timeout, or any status >= 500); 0 if 200 (soft 404) or any other status (e.g. 401, 400). Page: +1 if the final status is 200 or the fetch was unreachable (0, 403, 429, 503, timeout); 0 otherwise (e.g. 404, 500, 502, 401). Header: +1 unless X-Robots-Tag matches /\\b(noindex|none)\\b/i. A noindex header forces status fail regardless of score.",
+        "rules": [
+          {
+            "condition": "probe final status is 404 or 410",
+            "points": "+1"
+          },
+          {
+            "condition": "probe inconclusive: status 0 (network/timeout), 403, 429, 503, timedOut, or status >= 500",
+            "points": "+1",
+            "note": "Benefit of the doubt"
+          },
+          {
+            "condition": "probe final status 200 (including a redirect of unknown URLs to the homepage or any 200 page)",
+            "points": "0",
+            "message": "Unknown URLs return HTTP 200 (soft 404), so agents cannot tell a missing page from a real one"
+          },
+          {
+            "condition": "probe any other status (e.g. 400, 401, 405, 451)",
+            "points": "0",
+            "message": "Unknown URLs return HTTP <status> instead of 404"
+          },
+          {
+            "condition": "page final status 200",
+            "points": "+1"
+          },
+          {
+            "condition": "page unreachable: status 0, 403, 429, 503, or timedOut",
+            "points": "+1",
+            "note": "Adds an informational issue 'likely bot protection' when status is not 200"
+          },
+          {
+            "condition": "page any other status (e.g. 404, 410, 500, 502, 401)",
+            "points": "0",
+            "message": "This page returns HTTP <status> to a plain fetch"
+          },
+          {
+            "condition": "page X-Robots-Tag header (case-insensitive name) present and matches /\\b(noindex|none)\\b/i",
+            "points": "0",
+            "status": "fail (forced)"
+          },
+          {
+            "condition": "X-Robots-Tag absent or without noindex/none",
+            "points": "+1"
+          },
+          {
+            "condition": "exception thrown anywhere (e.g. invalid URL)",
+            "status": "fail",
+            "points": 0
+          }
+        ],
+        "status_mapping": "If X-Robots-Tag blocks: fail (score can still be 2). Else score 3 pass, 2 warning, 0-1 fail.",
+        "inconclusive": "isUnreachable (status 0, 403, 429, 503 or timeout) on the probe or page still awards that criterion's point; the probe additionally treats any 5xx as inconclusive. No details.inconclusive flag is set and there is no half-weight warning; an unreachable site can score 3/3 pass."
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/crawlability/http-behavior.mjs",
+        "source_procedure": "Infer the host's behavior from repo config; mark as 'predicted' since the real answer needs a live server. 1) 404 handling: look for a custom 404 page and whether the host serves it with status 404: static/Vite: 404.html in public/ or output root (Netlify, Cloudflare Pages, GitHub Pages, Vercel static all serve 404.html with 404); Astro: src/pages/404.astro; Hugo: layouts/404.html; Eleventy: 404.html/404.md permalink; Next.js: app/not-found.tsx or pages/404.tsx (Next returns 404 by default). Then look for SPA catch-alls that turn unknown URLs into 200: Netlify/Cloudflare _redirects '/* /index.html 200', netlify.toml [[redirects]] from='/*' to='/index.html' status=200, vercel.json rewrites {source:'/(.*)', destination:'/index.html'}, Cloudflare Pages projects WITHOUT a 404.html (Pages then serves index.html as SPA fallback with 200), Firebase hosting rewrites '**', Next.js catch-all routes app/[...slug]/page.tsx that never call notFound(). Also catch-all redirects of unknown paths to '/' (301/302 to a 200 page = soft 404). 2) Page status: check the audited route exists as a page/file and is not redirected or behind auth (middleware.ts, _redirects, vercel.json redirects, netlify.toml redirects, basic-auth headers). 3) X-Robots-Tag: grep _headers (Netlify/Cloudflare Pages), netlify.toml [[headers]], vercel.json headers, next.config.js headers(), Next.js middleware setting X-Robots-Tag, Hugo/server configs (nginx.conf, .htaccess Header set X-Robots-Tag) for values matching /\\b(noindex|none)\\b/i on paths covering production pages. Note that Vercel adds 'X-Robots-Tag: noindex' automatically on preview deployments only, not production.",
+        "llm_criteria": "Judge from the repo's hosting target and framework defaults whether (a) a request for a random nonexistent path would return 404/410 or 200 (SPA fallback, catch-all rewrite, redirect to home), (b) the audited page returns 200, and (c) any header rule applying to production pages sets X-Robots-Tag containing noindex or none as a whole word. Award points exactly as the rules say. If the host cannot be identified, report the probe criterion as unknown rather than guessing."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension observes live HTTP responses; the repo only lets us predict them. Host defaults (Cloudflare Pages SPA fallback when no 404.html exists, framework adapters, CDN or WAF rules, origin servers not in the repo), dashboard-configured headers/redirects, and edge middleware can all differ from what the source shows. The extension also awards points for WAF blocks and timeouts, which source analysis cannot reproduce."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/crawlability.http-behavior.md",
+      "fix_summary": "Add a real 404 page (public/404.html, src/pages/404.astro, layouts/404.html, app/not-found.tsx) and remove SPA catch-all 200 rewrites or redirect-to-home rules for unknown paths in _redirects, netlify.toml or vercel.json (or make the catch-all route call notFound()). Remove X-Robots-Tag noindex/none rules for production paths from _headers, netlify.toml [[headers]], vercel.json headers or next.config.js headers(). Host dashboard settings may still need manual changes.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "http.unknown_url.real_404",
+        "http.page.status_200",
+        "http.x_robots_tag.not_noindex"
+      ],
+      "extension_source": "src/shared/checks/http-behavior-checker.js"
+    },
+    {
+      "id": "structured-data.present",
+      "extension_key": "structuredData",
+      "name": "Structured Data",
+      "category": "structured-data",
+      "weight": 15,
+      "conditional": false,
+      "description": "Detects JSON-LD (and, as a fallback, Microdata/RDFa) on the page and awards tiered points for schema.org types that AI answer engines use most (FAQPage above all, then HowTo/Product/Organization, then Article/VideoObject/Dataset, then BreadcrumbList/ItemList/Person). Machine-readable entities let AI systems extract facts and Q&A pairs without guessing from prose.",
+      "inputs": [
+        "rendered DOM: every <script type=\"application/ld+json\"> element (text content)",
+        "rendered DOM: [itemscope] elements and their itemtype attribute (Microdata)",
+        "rendered DOM: [typeof], [property], [vocab] elements (RDFa)"
+      ],
+      "scoring": {
+        "summary": "If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check fails with 0. If there is Microdata/RDFa but zero JSON-LD script tags, it is a fixed warning with 4 points. Otherwise (at least one JSON-LD script tag, even one that fails to parse) points are summed: base 4 if at least one block parses as JSON, FAQ 8 (valid) or 4 (only invalid), each Tier 1 type present 3 (valid) or 1 (only invalid), each Tier 2 type 2 or 0.5, each Tier 3 type 1 or 0. Total = min(15, Math.round(sum)). Validity comes from SchemaValidator.validate() per found entity; a type counts as valid when at least one of its entities validates. Entities are found by walking every parsed block recursively (all nested objects/arrays and @graph), after resolving pure {\"@id\"} references from @graph and top-level @id objects in the properties mainEntity, itemListElement, acceptedAnswer, author, publisher.",
+        "rules": [
+          {
+            "condition": "count(script[type=\"application/ld+json\"]) == 0 AND count([itemscope]) == 0 AND count([typeof]) == 0 AND count([vocab]) == 0",
+            "status": "fail",
+            "points": 0,
+            "message": "No structured data found"
+          },
+          {
+            "condition": "count(script[type=\"application/ld+json\"]) == 0 AND (Microdata found OR RDFa found)",
+            "status": "warning",
+            "points": 4,
+            "note": "Fixed 4 regardless of Microdata/RDFa types or validity. Microdata types = itemtype matched by /schema\\.org\\/(\\w+)/ (else raw itemtype). RDFa types = typeof split on whitespace. RDFa 'found' needs [typeof] or [vocab]; [property] alone (e.g. OpenGraph meta property=) does NOT count."
+          },
+          {
+            "condition": "JSON-LD present: parse each script textContent with JSON.parse; parse failures are kept as invalid blocks (they still make jsonldData.length > 0, so Microdata/RDFa fallback is skipped)",
+            "points": "n/a"
+          },
+          {
+            "condition": "base: at least one JSON-LD block parsed successfully",
+            "points": "+4"
+          },
+          {
+            "condition": "FAQ: any entity with @type 'FAQPage' (string or inside @type array); valid if SchemaValidator.validateFAQPage passes for at least one",
+            "points": "+8 valid / +4 only invalid / 0 absent"
+          },
+          {
+            "condition": "Tier 1 HowTo: @type 'HowTo'",
+            "points": "+3 valid / +1 only invalid"
+          },
+          {
+            "condition": "Tier 1 Product: @type 'Product'",
+            "points": "+3 valid / +1 only invalid"
+          },
+          {
+            "condition": "Tier 1 Organization: @type in ['Organization','LocalBusiness','Restaurant','Store','MedicalBusiness','LegalService','FinancialService','FoodEstablishment','HealthAndBeautyBusiness','HomeAndConstructionBusiness','EntertainmentBusiness','AutomotiveBusiness','Corporation','GovernmentOrganization','EducationalOrganization','MedicalOrganization','NGO','Airline']. Nested objects count too (e.g. Article.publisher of @type Organization).",
+            "points": "+3 valid / +1 only invalid"
+          },
+          {
+            "condition": "Tier 2 Article: @type in ['Article','BlogPosting','NewsArticle','TechArticle']",
+            "points": "+2 valid / +0.5 only invalid"
+          },
+          {
+            "condition": "Tier 2 VideoObject: @type 'VideoObject'",
+            "points": "+2 valid / +0.5 only invalid"
+          },
+          {
+            "condition": "Tier 2 Dataset: @type 'Dataset'",
+            "points": "+2 valid / +0.5 only invalid"
+          },
+          {
+            "condition": "Tier 3 BreadcrumbList: @type 'BreadcrumbList'",
+            "points": "+1 valid / 0 only invalid"
+          },
+          {
+            "condition": "Tier 3 ItemList: @type 'ItemList'",
+            "points": "+1 valid / 0 only invalid"
+          },
+          {
+            "condition": "Tier 3 Person: @type 'Person' (nested author objects count)",
+            "points": "+1 valid / 0 only invalid"
+          },
+          {
+            "condition": "any other @type (WebPage, WebSite, Question, Answer, ListItem, ImageObject, etc.)",
+            "points": 0,
+            "note": "Categorized as Other; contributes nothing. Matching is exact and case-sensitive on the @type string, so 'schema:FAQPage' or full IRIs do not match."
+          },
+          {
+            "condition": "total",
+            "points": "min(15, Math.round(base + faq + tier1 + tier2 + tier3))"
+          },
+          {
+            "condition": "validator FAQPage: mainEntity must be an array (else invalid). Each item: @type === 'Question', has name, has acceptedAnswer with @type === 'Answer' and non-empty text",
+            "points": "validity"
+          },
+          {
+            "condition": "validator HowTo: name required; step must be an array with length >= 2; each step @type === 'HowToStep' and has text or name. (HowToSection steps are invalid.)",
+            "points": "validity"
+          },
+          {
+            "condition": "validator Product: name, image, description required; offers required; each offer needs price or priceRange AND priceCurrency; if aggregateRating present it needs ratingValue",
+            "points": "validity"
+          },
+          {
+            "condition": "validator Organization (all subtypes): only name required (url/logo/sameAs/address/telephone/openingHours are warnings only)",
+            "points": "validity"
+          },
+          {
+            "condition": "validator Article types: headline required; author required (if first author is an object it needs name; a string author is only a warning); datePublished required and must parse with new Date()",
+            "points": "validity"
+          },
+          {
+            "condition": "validator Person: name required",
+            "points": "validity"
+          },
+          {
+            "condition": "validator BreadcrumbList: itemListElement must be an array; each item needs truthy position and name or item.name",
+            "points": "validity"
+          },
+          {
+            "condition": "validator ItemList: itemListElement must be an array (nothing else required)",
+            "points": "validity"
+          },
+          {
+            "condition": "validator VideoObject: name, description, thumbnailUrl, uploadDate (parseable by new Date()) required",
+            "points": "validity"
+          },
+          {
+            "condition": "validator Dataset: name and description required",
+            "points": "validity"
+          }
+        ],
+        "status_mapping": "JSON-LD path: score >= 12 pass, score >= 8 warning, else fail. No structured data: fail 0. Microdata/RDFa only: warning 4.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/structured-data/present.mjs",
+        "source_procedure": "1) Find every <script type=\"application/ld+json\"> in the source that ends up in the page's HTML: static HTML: *.html; Astro: src/layouts/*.astro, src/components/**, src/pages/** (inline <script type=\"application/ld+json\" set:html={JSON.stringify(obj)}> means the object literal in frontmatter must be evaluated or approximated); Hugo: layouts/** (partials like schema.html, head.html), plus Hugo internal templates ({{ template \"_internal/schema.html\" . }} emits <meta itemprop> tags without itemscope, which do not count, and no JSON-LD); Eleventy: _includes/**, src/**, JS data files; Next.js app router: app/**/page.tsx and layout.tsx rendering <script type=\"application/ld+json\" dangerouslySetInnerHTML={{__html: JSON.stringify(x)}}>; pages router: <Head> in pages/** and _document; Vite SPA: index.html. Prefer building the site (npm run build / hugo / eleventy) and scanning output HTML (dist/, public/, _site/, out/, .next/server/app/*.html) when possible, since that is exact. 2) Per page, JSON.parse each block; record parse failures. 3) If no JSON-LD, look for itemscope / typeof / vocab attributes. 4) Resolve @id references (mainEntity, itemListElement, acceptedAnswer, author, publisher) against @graph items and top-level @id objects, walk every object recursively, bucket by exact @type string, run the validator rules listed above, and sum points exactly as in rules. 5) Score per page template; report the representative page (home) plus worst key templates."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Exact when JSON-LD is literal in HTML or when the built output can be scanned. Differs when JSON-LD is assembled at runtime (client-side injection by GTM, Yoast/Rank Math style CMS plugins, React state), built from CMS data or template variables that cannot be resolved statically (validity of name/headline/datePublished then unknown), or injected per-route in SPAs. Extension evaluates one URL; source audit may cover many templates."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/structured-data.present.md",
+      "fix_summary": "Add a JSON-LD <script type=\"application/ld+json\"> block in the shared head/layout (Organization with name/url/logo/sameAs on every page; WebSite) and page-type blocks (Article/BlogPosting with headline, author {Person name}, datePublished; FAQPage only where visible Q&A exists; BreadcrumbList). Goes in index.html / Astro layout / Hugo partial / Eleventy _includes / Next.js layout.tsx or page.tsx. Skeletons can be generated automatically, but real names, FAQ content, prices and dates need user data.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "schema.jsonld.present",
+        "schema.jsonld.parses",
+        "schema.microdata_rdfa.fallback",
+        "schema.faq.present",
+        "schema.faq.valid",
+        "schema.howto.valid",
+        "schema.product.valid",
+        "schema.organization.valid",
+        "schema.article.valid",
+        "schema.videoobject.valid",
+        "schema.dataset.valid",
+        "schema.breadcrumblist.valid",
+        "schema.itemlist.valid",
+        "schema.person.valid"
+      ],
+      "extension_source": "src/shared/checks/structured-data-checker.js"
+    },
+    {
+      "id": "structured-data.valid",
+      "extension_key": "schemaValidation",
+      "name": "Schema Validation",
+      "category": "structured-data",
+      "weight": 5,
+      "conditional": false,
+      "description": "Parses every JSON-LD block, resolves @id references, walks every typed node (including nested ones) and validates known types against required-field rules. Broken or incomplete structured data is ignored or misread by AI engines and rich-result parsers, so valid markup is what actually gets used.",
+      "inputs": [
+        "rendered DOM: every script[type=\"application/ld+json\"] textContent"
+      ],
+      "scoring": {
+        "summary": "No JSON-LD blocks -> fail, 0. Otherwise start at 5; subtract 0.5 per block that fails JSON.parse; compute validationRate = round(100 * validSchemas / validatableSchemas) over all typed nodes (nested included) whose type has a validator (types without a validator are excluded; if none are validatable the rate is 100). Subtract 2 if rate < 50, 1 if rate < 80, 0.5 if rate < 100. Clamp at 0, round to 1 decimal, then Math.floor for the reported integer score.",
+        "rules": [
+          {
+            "id": "schema.present",
+            "condition": "zero script[type=\"application/ld+json\"] elements",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "id": "schema.json_syntax",
+            "condition": "each block where JSON.parse(textContent) throws",
+            "points": "-0.5 each"
+          },
+          {
+            "id": "schema.reference_resolution",
+            "condition": "before validation: build map of @id -> node from top-level data and each @graph item across all blocks; in each @graph item (or top-level node) replace values of properties mainEntity, itemListElement, acceptedAnswer, author, publisher that are exactly {\"@id\": X} (single key) with the mapped node, recursing only through those five properties and arrays",
+            "points": "n/a"
+          },
+          {
+            "id": "schema.node_collection",
+            "condition": "getSchemaTypes: every object with @type anywhere in the block (top level, @graph items, and recursively any nested object or array property except @type/@context/@graph) yields one entry per @type value (array @type yields multiple entries sharing the same data)",
+            "points": "n/a"
+          },
+          {
+            "id": "schema.validation_rate",
+            "condition": "validationRate < 50",
+            "points": "-2",
+            "issue": "Only N% of schemas pass validation"
+          },
+          {
+            "condition": "50 <= validationRate < 80",
+            "points": "-1"
+          },
+          {
+            "condition": "80 <= validationRate < 100",
+            "points": "-0.5"
+          },
+          {
+            "condition": "validationRate == 100 (including when no node has a validator)",
+            "points": 0
+          },
+          {
+            "id": "score.final",
+            "condition": "score = floor(max(0, round(score*10)/10))",
+            "points": "final",
+            "examples": "one parse error only -> 4; rate 80-99 -> 4; rate 50-79 -> 4; rate < 50 -> 3; rate < 50 plus 1 parse error -> 2; 2 parse errors -> 4; 3 parse errors -> 3"
+          },
+          {
+            "id": "schema.validators.note",
+            "condition": "Each rule below is an ISSUE (makes node invalid). Warnings never affect score. Types not listed return valid: null and are excluded from the rate (e.g. WebSite, WebPage, ImageObject, Offer, Question, Answer, HowToStep, ListItem, PostalAddress, SearchAction, Recipe, Event, Review, Dentist and any other LocalBusiness subtype not listed).",
+            "points": "n/a"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: FAQPage. Any issue makes the node invalid",
+            "issues": [
+              "mainEntity missing or not an array (stops)",
+              "each mainEntity item: @type !== \"Question\"",
+              "item missing name",
+              "item missing acceptedAnswer",
+              "acceptedAnswer @type !== \"Answer\"",
+              "acceptedAnswer missing text"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: HowTo. Any issue makes the node invalid",
+            "issues": [
+              "missing name",
+              "step missing or not an array (stops)",
+              "fewer than 2 steps",
+              "each step @type !== \"HowToStep\"",
+              "step missing both text and name"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: Product. Any issue makes the node invalid",
+            "issues": [
+              "missing name",
+              "missing image",
+              "missing description",
+              "missing offers",
+              "each offer (array or single) missing both price and priceRange",
+              "each offer missing priceCurrency",
+              "aggregateRating present but missing ratingValue"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: Organization, Corporation, GovernmentOrganization, EducationalOrganization, MedicalOrganization, NGO, Airline, LocalBusiness, Restaurant, Store, MedicalBusiness, LegalService, FinancialService, FoodEstablishment, HealthAndBeautyBusiness, HomeAndConstructionBusiness, EntertainmentBusiness, AutomotiveBusiness. Any issue makes the node invalid",
+            "issues": [
+              "missing name (only issue; url/logo/sameAs/address/telephone/openingHours are warnings)"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: Article, BlogPosting, NewsArticle, TechArticle. Any issue makes the node invalid",
+            "issues": [
+              "missing headline",
+              "missing author",
+              "author (first element if array) is an object without name",
+              "missing datePublished",
+              "datePublished not parseable by new Date() (named ISO 8601 but any Date-parseable string passes)"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: Person. Any issue makes the node invalid",
+            "issues": [
+              "missing name"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: BreadcrumbList. Any issue makes the node invalid",
+            "issues": [
+              "itemListElement missing or not an array (stops)",
+              "each item missing position (falsy, so position 0 is an issue)",
+              "each item missing both name and item.name"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: ItemList. Any issue makes the node invalid",
+            "issues": [
+              "itemListElement missing or not an array"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: VideoObject. Any issue makes the node invalid",
+            "issues": [
+              "missing name",
+              "missing description",
+              "missing thumbnailUrl",
+              "missing uploadDate",
+              "uploadDate not parseable by new Date()"
+            ],
+            "points": "affects validationRate"
+          },
+          {
+            "id": "schema.validator",
+            "condition": "node @type in: Dataset. Any issue makes the node invalid",
+            "issues": [
+              "missing name",
+              "missing description"
+            ],
+            "points": "affects validationRate"
+          }
+        ],
+        "status_mapping": "No JSON-LD -> fail. Else pass if validationRate == 100 and no parse errors; warning if validationRate >= 50; else fail. Status is independent of the numeric score (e.g. a parse error alone gives warning with 4).",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/structured-data/valid.mjs",
+        "source_procedure": "Collect JSON-LD per rendered page. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Look for literal <script type=\"application/ld+json\"> in templates and for code that emits it: Astro <script type=\"application/ld+json\" set:html={JSON.stringify(x)}>, Next.js <script type=\"application/ld+json\" dangerouslySetInnerHTML={{__html: JSON.stringify(x)}}> or libraries like next-seo/schema-dts, Hugo partials (schema.html, {{ jsonify }}), Eleventy JSON-LD includes, Vite SPA index.html. For literal blocks, JSON.parse after stripping template tags only if they are whole-value interpolations (replace with a placeholder string); for code-built objects, evaluate or statically reconstruct the object literal. If a build exists (dist/, public/ after hugo, out/, .next/server/app/*.html, _site/), prefer parsing built HTML. Then apply exactly: resolve @id refs (five properties only), collect every typed node recursively, validate with the listed rules, compute rate, score and status. Count one scripted block per rendered script element."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Full parity when JSON-LD is literal in templates or a build output is available. Partial when JSON-LD is assembled at runtime (SPA frameworks, tag managers, CMS plugins injecting JSON-LD), when values come from CMS/frontmatter (a missing headline or datePublished depends on per-post data), or when templates emit different blocks per page type. Template syntax inside literal blocks can make static JSON.parse fail where the rendered page parses fine, so template tags must be substituted before parsing, never counted as parse errors."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/structured-data.valid.md",
+      "fix_summary": "Fix JSON syntax and add missing required properties per validator (e.g. Organization.name, Article headline/author{name}/datePublished ISO date, Product name/image/description/offers{price,priceCurrency}, FAQPage Question/acceptedAnswer Answer text, BreadcrumbList position/name) in the JSON-LD source: layout templates, Astro/Next components, Hugo partials, Eleventy includes or index.html. Values drawn from existing page data; content like prices or answer text may need the user.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "schema.present",
+        "schema.json_syntax",
+        "schema.validation_rate",
+        "schema.valid.faqpage",
+        "schema.valid.howto",
+        "schema.valid.product",
+        "schema.valid.organization",
+        "schema.valid.article",
+        "schema.valid.person",
+        "schema.valid.breadcrumblist",
+        "schema.valid.itemlist",
+        "schema.valid.videoobject",
+        "schema.valid.dataset"
+      ],
+      "extension_source": "src/shared/checks/schema-validation-checker.js"
+    },
+    {
+      "id": "meta.title",
+      "extension_key": "metaTitle",
+      "name": "Meta Title",
+      "category": "meta",
+      "weight": 5,
+      "conditional": false,
+      "description": "Checks that the page has a <title>, that it is 50-60 characters, that it is not a generic placeholder like 'Home', that it carries page context beyond a bare brand name, and that it is not stuffed with separators. The title is the primary label AI search and LLMs use to identify and cite a page.",
+      "inputs": [
+        "page HTML <head> <title> (document.title of the rendered page)"
+      ],
+      "scoring": {
+        "summary": "Start at 5. Empty/whitespace title returns fail 0 immediately. Otherwise subtract a length penalty (only one applies), 2 for a generic title, 0.5 for a short (<20 chars) title with no '-', '|' or ':', and 0.5 for more than 3 separator characters. finalScore = max(0, round to 1 decimal). Status uses finalScore; the reported score is Math.floor(finalScore).",
+        "rules": [
+          {
+            "condition": "document.title trimmed length == 0 (no <title> or empty)",
+            "status": "fail",
+            "points": 0,
+            "message": "No title tag found"
+          },
+          {
+            "condition": "start",
+            "points": 5
+          },
+          {
+            "condition": "trimmed length < 40",
+            "points": "-2",
+            "lengthStatus": "too_short"
+          },
+          {
+            "condition": "40 <= trimmed length < 50",
+            "points": "-0.5",
+            "lengthStatus": "short"
+          },
+          {
+            "condition": "trimmed length > 70",
+            "points": "-1.5",
+            "lengthStatus": "too_long"
+          },
+          {
+            "condition": "60 < trimmed length <= 70",
+            "points": "-0.5",
+            "lengthStatus": "long"
+          },
+          {
+            "condition": "50 <= trimmed length <= 60",
+            "points": "0",
+            "lengthStatus": "optimal"
+          },
+          {
+            "condition": "trimmed title matches (case-insensitive, whole string) one of: home, welcome, untitled, new page, page, document, index, test, website, my website, my blog, blog, site, my site, homepage",
+            "points": "-2",
+            "regexes": [
+              "/^home$/i",
+              "/^welcome$/i",
+              "/^untitled$/i",
+              "/^new page$/i",
+              "/^page$/i",
+              "/^document$/i",
+              "/^index$/i",
+              "/^test$/i",
+              "/^website$/i",
+              "/^my website$/i",
+              "/^my blog$/i",
+              "/^blog$/i",
+              "/^site$/i",
+              "/^my site$/i",
+              "/^homepage$/i"
+            ]
+          },
+          {
+            "condition": "trimmed length < 20 AND title contains none of '-', '|', ':' (brand-only)",
+            "points": "-0.5"
+          },
+          {
+            "condition": "count of characters matching /[-|:]/g in the title > 3 (every hyphen counts, including hyphens inside words)",
+            "points": "-0.5"
+          },
+          {
+            "condition": "finalScore",
+            "points": "max(0, Math.round(score*10)/10); reported score = Math.floor(finalScore)"
+          }
+        ],
+        "status_mapping": "Uses unfloored finalScore: >= 4 pass, >= 2.5 warning, else fail. Reported points are floored, so e.g. a 45-char title gets finalScore 4.5, status pass, score 4; a title < 20 chars with no separator gets 5-2-0.5 = 2.5, status warning, score 2.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/meta/title.mjs",
+        "source_procedure": "Resolve the <title> each page will render. Static HTML: <title> in each *.html. Vite SPA: index.html <title> (note runtime document.title changes). Astro: <title> in src/layouts/*.astro, usually {title} from props; resolve the value passed from each src/pages/** file (frontmatter or Layout title=\"...\" prop), including any template like `${title} | Site`. Hugo: layouts/_default/baseof.html or partials/head.html <title>{{ .Title }} ...{{ .Site.Title }}</title>; resolve with content front matter title and hugo.toml/config.toml title. Eleventy: _includes/** layouts <title>{{ title }}</title> with front matter/data files. Next.js app router: export const metadata = { title } or generateMetadata in app/**/layout.tsx and page.tsx, including title.template ('%s | Brand') and title.default from the root layout; pages router: <title> inside next/head in pages/** or _app. Best: build and read output HTML. Then apply rules on the trimmed, whitespace-collapsed string (browser document.title collapses internal whitespace and decodes entities)."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Full when the title is a literal or resolvable from front matter/metadata exports. Differs when titles come from CMS data, i18n, runtime document.title updates in SPAs (react-helmet, vue-meta), or template composition that cannot be evaluated statically. Source audits every page, extension scores just the visited one."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/meta.title.md",
+      "fix_summary": "Set a unique 50-60 character title per page in the form 'Page Topic | Brand' using the stack's mechanism (index.html <title>, Astro Layout title prop, Hugo front matter title plus baseof template, Eleventy front matter, Next.js metadata.title with title.template in the root layout). The plugin can fix templates (add a brand suffix, remove duplicate separators) automatically, but page-specific wording needs user review.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "meta.title.present",
+        "meta.title.length",
+        "meta.title.not_generic",
+        "meta.title.has_context",
+        "meta.title.separators"
+      ],
+      "extension_source": "src/shared/checks/meta-title-checker.js"
+    },
+    {
+      "id": "meta.description",
+      "extension_key": "metaDescription",
+      "name": "Meta Description",
+      "category": "meta",
+      "weight": 5,
+      "conditional": false,
+      "description": "Checks that the page has a non-empty, well-sized, non-generic <meta name=\"description\"> that is not a copy of the title and not keyword-stuffed. Search engines and LLMs use the description as a compact summary and snippet of the page.",
+      "inputs": [
+        "page HTML <head>: meta[name=\"description\"] content",
+        "document.title"
+      ],
+      "scoring": {
+        "summary": "Start at 5. Missing tag or empty (trimmed length 0) => fail 0 immediately. Otherwise deduct for length (trimmed length: <70 -2; 70-119 -1; >170 -1; 161-170 -0.5; 120-160 no deduction), generic/placeholder opening (-2), exact match with title (-1) and keyword stuffing (-0.5). finalScore = max(0, round(score*10)/10). Status is derived from the unrounded-down finalScore, then the reported score is Math.floor(finalScore).",
+        "rules": [
+          {
+            "condition": "no element matches document.querySelector('meta[name=\"description\"]') (first match only; attribute name match is case-sensitive in selector value)",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "content.trim().length === 0",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "trimmed length < 70",
+            "points": "-2",
+            "lengthStatus": "too_short"
+          },
+          {
+            "condition": "70 <= length < 120",
+            "points": "-1",
+            "lengthStatus": "short"
+          },
+          {
+            "condition": "length > 170",
+            "points": "-1",
+            "lengthStatus": "too_long"
+          },
+          {
+            "condition": "161 <= length <= 170",
+            "points": "-0.5",
+            "lengthStatus": "long"
+          },
+          {
+            "condition": "120 <= length <= 160",
+            "points": "0",
+            "lengthStatus": "optimal"
+          },
+          {
+            "condition": "trimmed description matches any generic regex (case-insensitive): /^welcome to/, /^this is a/, /^this page/, /^description$/, /^lorem ipsum/, /^todo/, /^placeholder/, /^my website/, /^my blog/, /^my site/, /^about us$/, /^contact us$/, /^contact$/, /^services$/, /^products$/, /^home page/, /^homepage$/, /^default description/, /^add description here/, /^enter description/, /^website description/, /^page description/",
+            "points": "-2"
+          },
+          {
+            "condition": "description.toLowerCase().trim() === document.title.toLowerCase().trim()",
+            "points": "-1"
+          },
+          {
+            "condition": "keyword stuffing: split lowercase description on /\\s+/, count words with length > 3; max count > 3 AND total word count > 10",
+            "points": "-0.5"
+          },
+          {
+            "condition": "CTA regex /\\b(learn|discover|find|get|see|read|explore|check|try|start)\\b/i",
+            "points": "0 (informational, details.hasCta only)"
+          },
+          {
+            "condition": "finalScore = max(0, round(score*10)/10); reported score = Math.floor(finalScore)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "Using the decimal finalScore (before floor): >= 4 pass, >= 2.5 warning, else fail. Reported score is floor(finalScore), so e.g. 4.5 => pass with 4 points, 3.5 => warning with 3 points.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/meta/description.mjs",
+        "source_procedure": "Find the description meta and title per page. Static HTML / Vite: <meta name=\"description\"> and <title> in each *.html / index.html. Astro: src/layouts/*.astro and page frontmatter props passed to the layout (e.g. description prop) in src/pages/**. Hugo: layouts/_default/baseof.html, layouts/partials/head*.html; value usually from .Description / .Params.description / site.Params.description in hugo.toml/config.toml and content front matter. Eleventy: _includes/** layout plus front matter 'description' in src/**. Next.js app router: export const metadata / generateMetadata in app/**/layout.tsx and page.tsx (description, title, title.template); pages router: <Head> in pages/_app, _document or per page, next-seo configs. Resolve template variables from front matter/config where possible, then apply the rules above with the final string lengths."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Exact when the description is a literal in HTML or front matter. Differs when the value is computed at runtime (JS-injected via react-helmet/SPA, CMS-fetched data, generateMetadata with remote data), when a title template suffix changes document.title (affects the title-equality rule), or when a framework adds a default description. HTML entities must be decoded before measuring length."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/meta.description.md",
+      "fix_summary": "Add or rewrite <meta name=\"description\" content=\"...\"> with 120-160 characters (ideally 150-160), unique per page, not identical to the title and not starting with generic phrases. Place in the head layout (Astro layout prop, Hugo front matter description, Eleventy front matter, Next.js metadata.description, index.html for Vite); the plugin can draft text from page content but the user should approve it.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "meta.description.present",
+        "meta.description.nonempty",
+        "meta.description.length",
+        "meta.description.generic",
+        "meta.description.equals_title",
+        "meta.description.keyword_stuffing"
+      ],
+      "extension_source": "src/shared/checks/meta-description-checker.js"
+    },
+    {
+      "id": "meta.open-graph",
+      "extension_key": "openGraph",
+      "name": "Open Graph",
+      "category": "meta",
+      "weight": 3,
+      "conditional": false,
+      "description": "Checks for Open Graph meta tags (og:title, og:description, og:image required; og:url, og:type recommended) and that og:url agrees with the canonical URL. OG tags give social platforms and LLM crawlers a clean, structured summary of the page.",
+      "inputs": [
+        "page HTML <head>: meta[property=og:*]",
+        "link[rel=\"canonical\"] href"
+      ],
+      "scoring": {
+        "summary": "Tags are read only via meta[property=\"og:X\"]. Start at 3: -0.75 per missing required tag (og:title, og:description, og:image), -0.75 per present-but-empty required tag, -0.25 if og:url missing, -0.25 if og:type missing, -0.25 if og:url and a canonical both exist and normalizeUrl(og:url) !== normalizeUrl(canonical href). An og:image that is not an absolute URL adds an issue but no deduction. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+        "rules": [
+          {
+            "condition": "getMetaContent(p) = document.querySelector('meta[property=\"'+p+'\"]')?.content, null if element absent (meta name=\"og:*\" is NOT read)",
+            "points": "n/a"
+          },
+          {
+            "condition": "each of og:title, og:description, og:image missing (null)",
+            "points": "-0.75 each"
+          },
+          {
+            "condition": "each of og:title, og:description, og:image present but content.trim() empty",
+            "points": "-0.75 each"
+          },
+          {
+            "condition": "og:url missing (null)",
+            "points": "-0.25"
+          },
+          {
+            "condition": "og:type missing (null)",
+            "points": "-0.25"
+          },
+          {
+            "condition": "og:image truthy but new URL(og:image) throws (relative URL such as '/img.png')",
+            "points": "0 (issue text only)"
+          },
+          {
+            "condition": "og:url truthy AND link[rel=\"canonical\"] exists AND normalizeUrl(og:url) !== normalizeUrl(canonical.href). normalizeUrl = protocol//hostname + pathname + search, trailing '/' removed, lowercased (port and hash dropped). canonical.href is resolved to absolute by the browser.",
+            "points": "-0.25"
+          },
+          {
+            "condition": "og:site_name, og:locale",
+            "points": "0 (informational)"
+          },
+          {
+            "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: all present and consistent => 3 pass; missing og:url or og:type or mismatch => 2.75 pass/2; missing url+type => 2.5 pass/2; one required missing => 2.25 warning/2; nothing at all => 0.25 fail/0.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/meta/open-graph.mjs",
+        "source_procedure": "Per page, collect og:* meta tags and the canonical link. Static HTML / Vite: *.html, index.html. Astro: layouts/SEO components (astro-seo openGraph prop, custom Head.astro). Hugo: layouts/partials/head*.html, {{ template \"_internal/opengraph.html\" . }} (emits og:title, og:description, og:type, og:url, og:image when images/params set) and canonical from .Permalink; baseURL from hugo.toml. Eleventy: _includes/** layouts. Next.js app router: metadata.openGraph {title, description, images, url, type} and metadata.alternates.canonical plus metadataBase in app/**/layout.tsx|page.tsx; pages router: <Head> or next-seo. Resolve template values to strings (use site base URL from config to absolutize canonical), then apply rules."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Exact for literal tags. Differs for runtime-injected tags, framework or plugin defaults not visible in source (Hugo internal templates, Next.js metadata merging and metadataBase absolutization), template values empty at build time, and og:url vs canonical comparison when either depends on deployment base URL or trailing-slash settings of the host."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/meta.open-graph.md",
+      "fix_summary": "Add og:title, og:description, og:image (absolute URL), og:url (equal to the canonical) and og:type (website or article) as <meta property=...> in the shared head layout, or via Next.js metadata.openGraph, Hugo _internal/opengraph.html with images params, Astro/Eleventy layout head.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "social.og.title",
+        "social.og.description",
+        "social.og.image",
+        "social.og.image_absolute",
+        "social.og.url",
+        "social.og.type",
+        "social.og.url_matches_canonical"
+      ],
+      "extension_source": "src/shared/checks/opengraph-checker.js"
+    },
+    {
+      "id": "meta.twitter-cards",
+      "extension_key": "twitterCards",
+      "name": "Twitter Cards",
+      "category": "meta",
+      "weight": 3,
+      "conditional": false,
+      "description": "Checks for Twitter/X Card meta tags (twitter:card, twitter:title, twitter:description, twitter:image) with a valid card type, giving partial credit when only Open Graph tags exist. These tags control link previews on X and are extra structured metadata LLMs can read.",
+      "inputs": [
+        "page HTML <head>: meta[name|property=twitter:*]",
+        "meta[property=og:title|og:description|og:image]"
+      ],
+      "scoring": {
+        "summary": "Tags are read with meta[name=\"twitter:X\"] falling back to meta[property=\"twitter:X\"]. If none of twitter:card/title/description/image exist (null) but any og:title/og:description/og:image has non-empty content, return warning 2. Otherwise start at 3: -0.75 per missing required tag (card, title, description), -0.75 per present-but-empty (whitespace) required tag, -0.5 if twitter:image missing, -0.25 if twitter:card value not in [summary, summary_large_image, app, player]. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+        "rules": [
+          {
+            "condition": "getMetaContent(name): document.querySelector('meta[name=\"'+name+'\"]') || document.querySelector('meta[property=\"'+name+'\"]'); returns its content or null if no element",
+            "points": "n/a"
+          },
+          {
+            "condition": "twitter:card, twitter:title, twitter:description, twitter:image all null AND (og:title || og:description || og:image content truthy)",
+            "status": "warning",
+            "points": 2,
+            "note": "early return, OG fallback"
+          },
+          {
+            "condition": "each required tag (card, title, description) missing (null)",
+            "points": "-0.75 each"
+          },
+          {
+            "condition": "each required tag present but content.trim() empty",
+            "points": "-0.75 each"
+          },
+          {
+            "condition": "twitter:image missing (null); empty twitter:image is NOT penalized",
+            "points": "-0.5"
+          },
+          {
+            "condition": "twitter:card truthy and not one of ['summary', 'summary_large_image', 'app', 'player'] (exact, case-sensitive)",
+            "points": "-0.25"
+          },
+          {
+            "condition": "twitter:site and twitter:creator",
+            "points": "0 (informational)"
+          },
+          {
+            "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: all 4 tags valid => 3 pass; only image missing => 2.5 pass/2; invalid card type => 2.75 pass/2; one required missing => 2.25 warning/2 (1.75 warning/1 if image also missing); no twitter and no OG => 0.25 fail/0; OG-only => warning/2.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/meta/twitter-cards.mjs",
+        "source_procedure": "Per page, collect twitter:* and og:* meta tags from the head. Static HTML / Vite: *.html, index.html. Astro: src/layouts/*.astro, SEO components (e.g. astro-seo props twitter={...}), src/components/**/Head*.astro. Hugo: layouts/partials/head*.html, including internal templates {{ template \"_internal/twitter_cards.html\" . }} and \"_internal/opengraph.html\" (these emit twitter:card, twitter:title, twitter:description, and twitter:image when images configured). Eleventy: _includes/** layouts. Next.js app router: metadata.twitter {card, title, description, images} and metadata.openGraph in app/**/layout.tsx|page.tsx (Next emits name=\"twitter:*\"; whether Next.js derives twitter tags from openGraph depends on version, so inspect the build output if unsure); pages router: <Head> tags, next-seo DefaultSeo twitter config. Apply the rules above."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Exact for literal tags. Differs for tags injected at runtime (react-helmet in SPAs), SEO plugins/framework defaults that emit tags not visible in source (Hugo internal templates, Next.js metadata merging, Astro SEO integrations), and template values that may render empty at build time."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/meta.twitter-cards.md",
+      "fix_summary": "Add <meta name=\"twitter:card\" content=\"summary_large_image\">, twitter:title, twitter:description and twitter:image to the shared head layout, populated from the same variables as the page title/description/OG image (Next.js metadata.twitter, Hugo _internal/twitter_cards.html, Astro/Eleventy layout head).",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "social.twitter.card",
+        "social.twitter.card_type_valid",
+        "social.twitter.title",
+        "social.twitter.description",
+        "social.twitter.image",
+        "social.twitter.og_fallback"
+      ],
+      "extension_source": "src/shared/checks/twitter-cards-checker.js"
+    },
+    {
+      "id": "meta.language",
+      "extension_key": "languageTags",
+      "name": "Language Tags",
+      "category": "meta",
+      "weight": 3,
+      "conditional": false,
+      "description": "Checks that <html> has a lang attribute in the simple 'll' or 'll-RR' form using a recognised language (and region) code; hreflang and Content-Language meta are recorded. Language declaration helps LLMs and search engines interpret and route content to the right locale.",
+      "inputs": [
+        "page HTML: <html lang>",
+        "link[hreflang] elements",
+        "meta[http-equiv=\"Content-Language\"]"
+      ],
+      "scoring": {
+        "summary": "Start at 3. Missing or whitespace-only lang: -2. If present: must match /^([a-z]{2,3})(-([A-Z]{2}))?$/i else -0.5; if it matches but the language code is not in the built-in 70-code list, -0.5; else if a region is present and not in the built-in 70-region list, -0.25. hreflang and Content-Language are informational (issue text only, no points). finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+        "rules": [
+          {
+            "condition": "html lang attribute missing or trim() empty",
+            "points": "-2"
+          },
+          {
+            "condition": "lang.trim() does not match /^([a-z]{2,3})(-([A-Z]{2}))?$/i (e.g. 'zh-Hans', 'en_US', 'es-419', 'en-US-x-foo' fail)",
+            "points": "-0.5"
+          },
+          {
+            "condition": "language code (lowercased) not in: en es fr de it pt ru ja ko zh ar hi bn pa te mr ta ur gu kn nl pl uk ro el hu cs sv da fi no nb nn tr th vi id ms he fa sw tl fil ca eu gl sr hr bs sk sl bg mk sq et lv lt mt is ga cy af zu xh am ne si km lo my",
+            "points": "-0.5"
+          },
+          {
+            "condition": "else region present (uppercased) and not in: US GB CA AU NZ IE ZA IN PK NG ES MX AR CO PE VE CL EC GT CU FR BE CH LU MC DE AT IT PT BR RU UA BY KZ JP KR CN TW HK SG NL PL RO GR HU CZ SE DK FI NO TR TH VN ID MY PH IL AE SA EG KE GH MA DZ TN LY ET TZ UG ZW",
+            "points": "-0.25"
+          },
+          {
+            "condition": "more than 1 link[hreflang] and none has hreflang exactly 'x-default'",
+            "points": "0 (issue text only)"
+          },
+          {
+            "condition": "meta[http-equiv=\"Content-Language\"] content",
+            "points": "0 (informational)"
+          },
+          {
+            "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Reachable: valid lang => 3 pass; unknown region => 2.75 pass/2; bad format or unknown language => 2.5 pass/2; missing lang => 1 fail/1. Warning is unreachable.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/meta/language.mjs",
+        "source_procedure": "Find the root <html> tag per page. Static HTML / Vite: <html lang> in *.html / index.html. Astro: <html lang=...> in src/layouts/*.astro (may be a variable such as Astro.currentLocale). Hugo: layouts/_default/baseof.html, typically lang=\"{{ .Site.LanguageCode }}\" or {{ site.Language.LanguageCode }}; resolve from languageCode / defaultContentLanguage in hugo.toml/config.toml (Hugo languageCode like 'en-us' passes: regex is case-insensitive and region is uppercased). Eleventy: base layout in _includes/**, lang from _data/site.* or front matter. Next.js app router: <html lang> in app/layout.tsx (or app/[locale]/layout.tsx); pages router: <Html lang> in pages/_document.tsx, or i18n.defaultLocale in next.config.js (Next adds lang automatically when i18n is configured). Resolve the value and apply the rules; collect <link rel=alternate hreflang> for informational output."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Exact for literal lang values. Differs when lang is a template variable resolved at build/runtime, set by client-side i18n libraries after load, or added by a framework automatically (Next.js i18n). hreflang has no score impact so mismatches there do not matter."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/meta.language.md",
+      "fix_summary": "Set <html lang=\"en\"> (or the correct 'll' / 'll-RR' code such as en-US) in the root layout: index.html, Astro layout, Hugo baseof.html with languageCode in hugo.toml, Eleventy base layout, Next.js app/layout.tsx or pages/_document.tsx. Avoid script subtags like zh-Hans, which the extension penalizes.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "lang.html.present",
+        "lang.html.format",
+        "lang.html.known_code",
+        "lang.hreflang.x_default"
+      ],
+      "extension_source": "src/shared/checks/language-checker.js"
+    },
+    {
+      "id": "meta.viewport",
+      "extension_key": "mobileFriendly",
+      "name": "Mobile Friendly",
+      "category": "meta",
+      "weight": 3,
+      "conditional": false,
+      "description": "Checks the viewport meta tag: present, width=device-width, and initial-scale=1. Mobile-first indexing is standard, and a correct viewport is the baseline signal of a mobile-ready page. It does not test real responsiveness.",
+      "inputs": [
+        "page HTML <head>: meta[name=\"viewport\"] content"
+      ],
+      "scoring": {
+        "summary": "No viewport meta => fail 0. Otherwise start at 3; content is split on ',' and each part on '=' (trimmed, keys case-sensitive). width != 'device-width': -1.5 if a width value is set, -1 if width absent. initial-scale absent/empty: -0.5; present but parseFloat != 1: -0.25. user-scalable=no/0 and maximum-scale < 2 produce issue text only. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+        "rules": [
+          {
+            "condition": "no element for document.querySelector('meta[name=\"viewport\"]')",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "settings.width === 'device-width' (exact string after trim)",
+            "points": "0"
+          },
+          {
+            "condition": "width set to another value (e.g. 1024)",
+            "points": "-1.5"
+          },
+          {
+            "condition": "width key absent",
+            "points": "-1"
+          },
+          {
+            "condition": "initial-scale key absent or empty",
+            "points": "-0.5"
+          },
+          {
+            "condition": "initial-scale present and parseFloat(value) !== 1 (e.g. 1.0 is fine, 0.5 not)",
+            "points": "-0.25"
+          },
+          {
+            "condition": "user-scalable === 'no' or '0'",
+            "points": "0 (issue text only)"
+          },
+          {
+            "condition": "maximum-scale present and parseFloat < 2",
+            "points": "0 (issue text only)"
+          },
+          {
+            "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: width=device-width, initial-scale=1 => 3 pass; device-width only => 2.5 pass/2; device-width + initial-scale 0.5 => 2.75 pass/2; initial-scale=1 only => 2 warning/2; fixed width + initial-scale=1 => 1.5 warning/1; fixed width, no scale => 1 fail/1; empty content => 1.5 warning/1.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/meta/viewport.mjs",
+        "source_procedure": "Find <meta name=\"viewport\"> in the head. Static HTML / Vite: *.html / index.html. Astro: src/layouts/*.astro. Hugo: layouts/_default/baseof.html or partials/head*.html. Eleventy: _includes/** base layout. Next.js app router: Next adds a default viewport meta 'width=device-width, initial-scale=1' automatically; override via export const viewport / generateViewport (or legacy metadata.viewport) in app/**/layout.tsx; pages router: <meta name=\"viewport\"> in <Head> in _app (Next pages router also injects a default viewport if none). Parse content and apply the rules."
+      },
+      "parity": {
+        "level": "full",
+        "note": "Viewport is almost always a static literal in the head layout. Only framework-injected defaults (Next.js) and client-side modification are not directly visible; account for Next.js defaults explicitly."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/meta.viewport.md",
+      "fix_summary": "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> to the shared head layout (index.html, Astro layout, Hugo baseof/head partial, Eleventy base layout); for Next.js app router export viewport = { width: 'device-width', initialScale: 1 } or rely on the default.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "mobile.viewport.present",
+        "mobile.viewport.device_width",
+        "mobile.viewport.initial_scale"
+      ],
+      "extension_source": "src/shared/checks/mobile-checker.js"
+    },
+    {
+      "id": "content.headings",
+      "extension_key": "semanticHeadings",
+      "name": "Semantic Headings",
+      "category": "content",
+      "weight": 8,
+      "conditional": false,
+      "description": "Checks the H1-H6 outline: at least one heading, exactly one H1, no skipped levels, and not too many generic or very short headings. AI engines use the heading hierarchy to segment content into answerable sections.",
+      "inputs": [
+        "rendered DOM: all h1-h6 elements in document order and their textContent"
+      ],
+      "scoring": {
+        "summary": "No headings at all => fail 0. Otherwise start at 8: no H1 -3, or more than one H1 -2; -1 per skipped level (a heading whose level > previous heading level + 1), capped at -2; -1 if more than 3 generic/short headings. Score is an integer; status pass >= 6, warning >= 4, else fail.",
+        "rules": [
+          {
+            "condition": "document.querySelectorAll('h1, h2, h3, h4, h5, h6').length === 0",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "zero <h1>",
+            "points": "-3"
+          },
+          {
+            "condition": "more than one <h1>",
+            "points": "-2"
+          },
+          {
+            "condition": "skipped level: iterating headings in document order, with lastLevel = previous heading level (starts 0, first heading never flagged), level > lastLevel + 1. Going up (H4 -> H2) is fine.",
+            "points": "-1 each, max -2"
+          },
+          {
+            "condition": "generic heading: textContent.toLowerCase().trim() length < 3, OR exactly equals one of ['introduction', 'overview', 'welcome', 'about', 'more', 'info', 'content', 'section', 'chapter', 'home']. If count of generic headings > 3",
+            "points": "-1"
+          },
+          {
+            "condition": "finalScore = max(0, score)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": ">= 6 pass, >= 4 warning, else fail (integer score, no flooring needed). Worst case 8-3-2-1 = 2 fail.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/content/headings.mjs",
+        "source_procedure": "Compose the full rendered markup per page in document order: layout header, page body, components, footer. Static HTML: each *.html. Astro: layout + src/pages/** + components (headings in components count). Hugo: baseof.html + single/list templates + partials, plus headings from Markdown content (#, ##, ... map to h1-h6; note Hugo/most themes render the page title as <h1> in the template, so a '# ' in content makes a second H1). Eleventy: layouts + Markdown/Nunjucks content. Next.js: layout.tsx + page.tsx JSX headings, MDX content. Vite SPA: root components and routed views. Extract heading level and text, then apply the rules."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension counts every h1-h6 in the live DOM, including visually hidden ones, headings in cookie banners, chat widgets, modals and client-rendered content. Source analysis must resolve component composition order and Markdown-to-HTML heading mapping; headings rendered from CMS data or conditionally are uncertain. Text from template variables affects the generic-heading rule."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/content.headings.md",
+      "fix_summary": "Ensure exactly one <h1> per page (usually the page title in the layout; demote extra H1s in content or header logos to h2/p), fix skipped levels by changing heading tags in templates/Markdown, and rename generic headings to descriptive text. Tag-level changes can be auto-applied; renaming generic headings needs user content.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "headings.present",
+        "headings.h1.single",
+        "headings.hierarchy.no_skips",
+        "headings.text.descriptive"
+      ],
+      "extension_source": "src/shared/checks/heading-analyzer.js"
+    },
+    {
+      "id": "content.quality",
+      "extension_key": "contentQuality",
+      "name": "Content Quality",
+      "category": "content",
+      "weight": 5,
+      "conditional": false,
+      "description": "Measures content depth of the page's main content area by word count against page-type-specific thresholds, plus paragraph structure. AI answer engines prefer substantive, well-structured pages they can quote and ground answers in; thin or empty pages (e.g. unhydrated SPAs) give them nothing to use.",
+      "inputs": [
+        "page URL pathname (page type detection)",
+        "document.title and first <h1> text (page type detection)",
+        "first script[type=application/ld+json] text (page type detection)",
+        "main content element text (rendered DOM, innerText)",
+        "all <p> elements in the document",
+        "counts of ul/ol, li, h1-h6 (informational)"
+      ],
+      "scoring": {
+        "summary": "Start at 5. Detect page type (URL, then title, then first JSON-LD block, else general) and select word-count thresholds. Extract main content text (first match of main, article, [role=main], .content, .main-content, #content, #main; else body), strip boilerplate, count words. Deduct 3 / 2 / 1 for very thin (< floor(min*0.33)) / thin (< floor(min*0.66)) / below minimum. Deduct 0.5 if fewer than 3 document-wide <p> with > 50 chars of text while wordCount > 200. If wordCount < 50, cap score at 1. finalScore = max(0, round to 1 decimal). Status from unfloored finalScore; reported score = Math.floor(finalScore).",
+        "rules": [
+          {
+            "step": "page type by URL pathname (lowercased), first match wins",
+            "condition": "contains '/contact' or '/kontakt' or '/contacto'",
+            "type": "contact"
+          },
+          {
+            "condition": "contains '/about' or '/about-us' or '/uber-uns'",
+            "type": "about"
+          },
+          {
+            "condition": "contains '/blog/' or '/article/' or '/post/' or '/news/'",
+            "type": "article"
+          },
+          {
+            "condition": "contains '/blog' and not '/blog/'",
+            "type": "blog"
+          },
+          {
+            "condition": "contains '/product/' or '/shop/' or '/item/'",
+            "type": "product"
+          },
+          {
+            "condition": "contains '/faq' or '/help' or '/support'",
+            "type": "faq"
+          },
+          {
+            "condition": "contains '/privacy' or '/terms' or '/legal' or '/policy'",
+            "type": "legal"
+          },
+          {
+            "condition": "pathname exactly '/', '/index', '/index.html' or '/home'",
+            "type": "homepage"
+          },
+          {
+            "step": "page type by document.title (lowercased)",
+            "condition": "contains 'contact' or 'kontakt'",
+            "type": "contact"
+          },
+          {
+            "condition": "title contains 'about' or 'über uns'",
+            "type": "about"
+          },
+          {
+            "condition": "title contains 'faq' or 'frequently asked'",
+            "type": "faq"
+          },
+          {
+            "step": "page type by schema",
+            "condition": "FIRST script[type=\"application/ld+json\"] textContent contains the literal substring '\"@type\":\"Article\"' or '\"@type\":\"BlogPosting\"' or '\"@type\":\"NewsArticle\"' (no whitespace allowed)",
+            "type": "article"
+          },
+          {
+            "condition": "FIRST ld+json block contains literal '\"@type\":\"Product\"'",
+            "type": "product"
+          },
+          {
+            "condition": "otherwise",
+            "type": "general"
+          },
+          {
+            "step": "thresholds {minimum, recommended, excellent}",
+            "values": {
+              "article": [
+                500,
+                800,
+                1500
+              ],
+              "blog": [
+                400,
+                600,
+                1200
+              ],
+              "product": [
+                150,
+                300,
+                600
+              ],
+              "homepage": [
+                150,
+                300,
+                500
+              ],
+              "about": [
+                200,
+                400,
+                800
+              ],
+              "contact": [
+                50,
+                100,
+                200
+              ],
+              "legal": [
+                300,
+                500,
+                1000
+              ],
+              "faq": [
+                300,
+                500,
+                1000
+              ],
+              "general": [
+                200,
+                300,
+                600
+              ]
+            }
+          },
+          {
+            "step": "main content",
+            "condition": "first element matching, in order: 'main', 'article', '[role=\"main\"]', '.content', '.main-content', '#content', '#main'; fallback document.body. Clone and remove: nav, header, footer, aside, .nav, .navigation, .menu, .sidebar, .header, .footer, .advertisement, .ad, script, style, noscript, iframe, [role=\"navigation\"], [role=\"banner\"], [role=\"contentinfo\"]. Text = innerText (or textContent) trimmed. Words = split on /\\s+/, non-empty."
+          },
+          {
+            "condition": "wordCount < floor(minimum * 0.33)",
+            "points": "-3",
+            "wordCountStatus": "very_thin"
+          },
+          {
+            "condition": "else wordCount < floor(minimum * 0.66)",
+            "points": "-2",
+            "wordCountStatus": "thin"
+          },
+          {
+            "condition": "else wordCount < minimum",
+            "points": "-1",
+            "wordCountStatus": "below_average"
+          },
+          {
+            "condition": "else wordCount >= excellent / >= recommended",
+            "points": "0",
+            "wordCountStatus": "comprehensive / good (informational)"
+          },
+          {
+            "condition": "count of ALL document <p> whose innerText.trim().length > 50 is < 3 AND wordCount > 200",
+            "points": "-0.5"
+          },
+          {
+            "condition": "wordCount < 50",
+            "effect": "score = min(score, 1)"
+          },
+          {
+            "step": "informational only (no score effect)",
+            "condition": "lists (ul, ol), li count, heading count (h1-h6), qualityIndicators {hasLists, hasMultipleHeadings >=3, hasSubstantialParagraphs >=3, hasGoodWordCount >=300}, hasGoodStructure (unused)"
+          },
+          {
+            "step": "final",
+            "condition": "finalScore = max(0, round(score*10)/10); reported score = floor(finalScore)"
+          }
+        ],
+        "status_mapping": "Based on unfloored finalScore: >= 4 pass, >= 2.5 warning, else fail. Reported score is Math.floor(finalScore), so e.g. 4.5 -> pass with score 4, 3.5 -> warning with 3, 2.5 -> warning with 2.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/content/quality.mjs",
+        "source_procedure": "Per page (for a site audit pick representative pages: homepage, one article/blog post, about, contact, product): 1) Derive the URL pathname from the file route (static HTML: path of *.html, index.html -> '/dir/'; Astro: src/pages/**; Hugo: content/** with permalinks in hugo.toml/config.toml; Eleventy: permalink front matter or input path; Next.js: app/**/page.tsx or pages/**; Vite SPA: index.html route '/' only). 2) Determine page type with the exact URL, title, first-JSON-LD substring rules. 3) Build the page's effective HTML: static HTML directly; for templates, combine the layout (src/layouts/*.astro, layouts/_default/*.html, _includes/**, app/**/layout.tsx) with the content (Markdown/MDX body renders inside main/article). 4) Find the first main-content selector, remove the boilerplate selector list, extract text, count whitespace-separated words (Markdown body word count is a good proxy when the layout wraps it in main/article). 5) Count <p> elements in the whole page with > 50 chars (Markdown paragraphs become <p>). 6) Apply deductions and cap. For Vite SPA with an empty index.html body the rendered-DOM value is unknown from source; count text in the components rendered into the route.",
+        "llm_criteria": "Only needed when content is produced by components or data (CMS, JSON, MDX components) that a script cannot flatten: estimate the visible word count of the main content (excluding nav, header, footer, aside, sidebar, ads) and the number of paragraphs longer than about 50 characters, then apply the same numeric thresholds. Do not judge prose quality; the extension does not."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension counts words from the rendered DOM using innerText, which excludes hidden (display:none) text and includes JS-rendered content; source counting may include hidden text and miss client-rendered or CMS-fetched content. Page type depends on the live URL (permalinks, trailing slashes, i18n prefixes) and document.title after templating. The paragraph count is document-wide including nav/footer <p>. Templates with variables or components make exact word counts approximate."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/content.quality.md",
+      "fix_summary": "Expand thin pages to at least the page-type minimum (e.g. 200 general, 500 article, 150 homepage/product) and break long text into 3+ real <p> paragraphs; wrap the primary content in <main> or <article> in the layout so boilerplate is excluded. The plugin can add the <main> wrapper automatically but the added content must be written or approved by the user.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "content.quality.page_type",
+        "content.quality.word_count",
+        "content.quality.paragraphs",
+        "content.quality.min_content",
+        "content.quality.main_landmark"
+      ],
+      "extension_source": "src/shared/checks/content-quality-checker.js"
+    },
+    {
+      "id": "content.freshness",
+      "extension_key": "contentFreshness",
+      "name": "Content Freshness",
+      "category": "content",
+      "weight": 5,
+      "conditional": false,
+      "description": "Checks whether the page exposes machine-readable publish and modified dates via article:published_time / article:modified_time meta, JSON-LD datePublished / dateModified, or <time datetime> elements. Dates let AI engines judge recency when choosing sources to cite. It does not evaluate how old the dates are.",
+      "inputs": [
+        "meta[property=\"article:published_time\"], meta[property=\"article:modified_time\"]",
+        "script[type=\"application/ld+json\"] contents (recursive search)",
+        "time[datetime] elements"
+      ],
+      "scoring": {
+        "summary": "Publish date found if article:published_time has content or any JSON-LD block contains a truthy datePublished at any nesting depth. Modified date found if article:modified_time has content, or any JSON-LD block contains a truthy dateModified at any depth, or any <time datetime> element exists. Neither => fail 0. Otherwise start at 5 and subtract 2 for whichever is missing. Result: both => 5 pass; one only => 3 warning.",
+        "rules": [
+          {
+            "condition": "hasPublishDate: meta[property=\"article:published_time\"] content truthy",
+            "points": "n/a"
+          },
+          {
+            "condition": "hasModifiedDate: meta[property=\"article:modified_time\"] content truthy",
+            "points": "n/a"
+          },
+          {
+            "condition": "JSON-LD: each script[type=\"application/ld+json\"] JSON.parse'd (invalid JSON skipped silently); findPropertyInObject recursively searches objects and arrays for own property 'datePublished' / 'dateModified' with truthy value",
+            "points": "n/a"
+          },
+          {
+            "condition": "hasTimeElements: document.querySelectorAll('time[datetime]').length > 0 (counts as a MODIFIED signal)",
+            "points": "n/a"
+          },
+          {
+            "condition": "foundPublish = hasPublishDate || hasJsonLdPublish; foundModified = hasModifiedDate || hasJsonLdModified || hasTimeElements",
+            "points": "n/a"
+          },
+          {
+            "condition": "neither foundPublish nor foundModified",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "!foundPublish",
+            "points": "-2"
+          },
+          {
+            "condition": "!foundModified",
+            "points": "-2"
+          },
+          {
+            "condition": "finalScore = max(0, score) (integer)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": ">= 4 pass, >= 2 warning, else fail. Reachable: 5 pass, 3 warning, 0 fail.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/content/freshness.mjs",
+        "source_procedure": "Per page, look for date signals in the rendered output. Static HTML: meta/JSON-LD/<time datetime> in *.html. Astro: layouts and page components (frontmatter pubDate/updatedDate often rendered via <time datetime={...}> or JSON-LD in BaseHead.astro); content collections schema in src/content/config.ts. Hugo: layouts/partials/head*.html, _internal/opengraph.html (emits article:published_time and article:modified_time for pages with .Date/.Lastmod when page is a regular page in a section), _internal/schema.html, single.html <time datetime=\"{{ .Date.Format ... }}\">; front matter date/lastmod. Eleventy: layouts in _includes/** using page.date / front matter. Next.js: metadata.openGraph {type: 'article', publishedTime, modifiedTime} (emits article:published_time/modified_time), JSON-LD <script> in page.tsx, <time dateTime> in components. Vite SPA: components. Determine which signals will be present on the audited page type (e.g. blog posts vs home page) and apply the rules."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Signals are usually template-driven and conditional (only on article pages, only when front matter has dates), so source analysis must resolve which templates apply to which pages. JSON-LD or <time> elements injected by JS, CMS content, or third-party widgets (e.g. comment timestamps with <time datetime>) are visible to the extension but not the repo. Any <time datetime> anywhere on the page (even in a footer or widget) counts as a modified date."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/content.freshness.md",
+      "fix_summary": "Emit both dates: add article:published_time and article:modified_time meta (or Next.js metadata.openGraph publishedTime/modifiedTime, Hugo _internal/opengraph.html with date/lastmod), and/or JSON-LD datePublished/dateModified, and render <time datetime=\"...\"> for the updated date in the article template. Wiring templates is automatic; real date values come from front matter or git history and may need user confirmation.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "freshness.published.meta",
+        "freshness.published.jsonld",
+        "freshness.modified.meta",
+        "freshness.modified.jsonld",
+        "freshness.modified.time_element"
+      ],
+      "extension_source": "src/shared/checks/content-freshness-checker.js"
+    },
+    {
+      "id": "content.author",
+      "extension_key": "authorMeta",
+      "name": "Author Signals",
+      "category": "content",
+      "weight": 5,
+      "conditional": false,
+      "description": "Looks for author attribution (JSON-LD Person/Article.author, microdata, meta tags, byline text) plus E-E-A-T signals: expertise credentials, an author bio or author/about link, and site trust pages (about, contact, privacy, terms, address). AI answer engines weigh who wrote content and whether the site looks accountable when choosing sources to cite.",
+      "inputs": [
+        "rendered DOM: script[type=\"application/ld+json\"] blocks",
+        "rendered DOM: microdata [itemprop=\"author\"], [itemtype*=\"schema.org/Person\"], [itemprop=\"name\"]",
+        "page HTML <head>: meta[name=\"author\"], meta[property=\"article:author\"], meta[name=\"twitter:creator\"]",
+        "document.body.innerText (visible text; first 5000 chars used for credential scan)",
+        "element textContent of h2, h3, h4, h5, p, div, section, aside",
+        "anchor hrefs (trust and author links, social profile links)",
+        "address elements and [itemtype*=\"PostalAddress\"]"
+      ],
+      "scoring": {
+        "summary": "Four additive components capped at 5. Author attribution: +2 if an author name is resolved by any detector (priority JSON-LD, microdata, meta, text pattern), else +1 if an author marker exists without a usable name (meta[name=author] present but empty, or microdata author/Person present without name), else 0. Expertise: +1 if any of 41 expertise regexes matches the combined text (author bio text + schema author jobTitle/description/hasCredential/alumniOf/knowsAbout + first 5000 chars of body innerText). Authoritativeness: +1 if an author bio or author link is detected. Trustworthiness: +1 if at least 3 of 5 trust signals are present. Score is an integer 0-5.",
+        "rules": [
+          {
+            "id": "author.name",
+            "condition": "authorName resolved (see author_detection_order)",
+            "points": "+2"
+          },
+          {
+            "id": "author.marker_only",
+            "condition": "no authorName but hasAuthorMeta (meta[name=\"author\"] element exists, even with empty content) OR hasMicrodataAuthor (any [itemprop=\"author\"] or [itemtype*=\"schema.org/Person\"] element exists) OR hasSchemaAuthor",
+            "points": "+1",
+            "note": "hasSchemaAuthor is only set when a schema name was found, so it cannot reach this branch in practice."
+          },
+          {
+            "id": "author.none",
+            "condition": "none of the above",
+            "points": 0,
+            "issue": "No author attribution found"
+          },
+          {
+            "id": "eeat.expertise",
+            "condition": "any expertisePatterns regex matches combinedText",
+            "points": "+1",
+            "patterns": [
+              "/\\b(PhD|Ph\\.D|Ed\\.D|Sc\\.D|DPhil|D\\.Phil)\\b/i",
+              "/\\b(MD|M\\.D|DO|D\\.O|DDS|DMD|PharmD|DVM|JD|J\\.D)\\b/i",
+              "/\\b(MBA|MFA|MPH|MSW|MEd|M\\.Ed|LLM|LL\\.M)\\b/i",
+              "/\\b(MA|M\\.A|MS|M\\.S|MSc|M\\.Sc|MEng|M\\.Eng)\\b/i",
+              "/\\b(BA|B\\.A|BS|B\\.S|BSc|B\\.Sc|BEng|B\\.Eng)\\b/i",
+              "/\\b(Dr\\.|Prof\\.)(?=\\s|$)/i",
+              "/\\b(Professor|Lecturer|Researcher|Fellow)\\b/i",
+              "/\\b(Associate\\s+Professor|Assistant\\s+Professor|Adjunct\\s+Professor)\\b/i",
+              "/\\b(Founder|Co-?Founder|CEO|CTO|CFO|COO|CMO|CIO|CISO)\\b/i",
+              "/\\b(President|Vice\\s+President|VP|Director|Managing\\s+Director)\\b/i",
+              "/\\b(Senior|Lead|Principal|Staff|Chief|Head\\s+of)\\s+\\w+/i",
+              "/\\b(Editor|Editor-in-Chief|Managing\\s+Editor|Executive\\s+Editor)\\b/i",
+              "/\\b(Journalist|Reporter|Correspondent|Columnist|Analyst)\\b/i",
+              "/\\b(Author|Writer|Contributor)\\b/i",
+              "/\\b(AWS\\s+Certified|AWS\\s+Solutions\\s+Architect|AWS\\s+Developer)\\b/i",
+              "/\\b(Google\\s+Cloud|GCP\\s+Certified|Google\\s+Certified)\\b/i",
+              "/\\b(Azure\\s+Certified|Microsoft\\s+Certified|MCSE|MCSA|MCP)\\b/i",
+              "/\\b(Cisco\\s+Certified|CCNA|CCNP|CCIE)\\b/i",
+              "/\\b(CompTIA|A\\+|Network\\+|Security\\+|CASP)\\b/i",
+              "/\\b(CISSP|CISM|CISA|CEH|OSCP|GIAC|GSEC)\\b/i",
+              "/\\b(PMP|PMI|PRINCE2|Scrum\\s+Master|CSM|PSM|SAFe)\\b/i",
+              "/\\b(Six\\s+Sigma|Lean\\s+Six\\s+Sigma|Black\\s+Belt|Green\\s+Belt)\\b/i",
+              "/\\b(CPA|CFA|CFP|CMA|CIA|ACCA|FRM)\\b/i",
+              "/\\b(RN|NP|PA-C|APRN|LPN|CNA|Board-?Certified)\\b/i",
+              "/\\b(Esq\\.)(?=\\s|,|$)/i",
+              "/\\b(Attorney|Barrister|Solicitor|Bar\\s+Admitted)\\b/i",
+              "/\\b(Realtor|Licensed\\s+Agent|CLU|ChFC|CPCU)\\b/i",
+              "/\\b(Certified|Licensed|Registered|Accredited|Chartered)\\b/i",
+              "/\\b(Board-?Certified|State-?Licensed|Nationally\\s+Certified)\\b/i",
+              "/\\b(Expert|Specialist|Consultant|Advisor|Strategist)\\b/i",
+              "/\\b(Practitioner|Professional|Veteran|Authority)\\b/i",
+              "/\\b(\\d{1,2}\\+?\\s*years?\\s*(of\\s+)?experience)\\b/i",
+              "/\\b(decade[s]?\\s+of\\s+experience)\\b/i",
+              "/\\b(over\\s+\\d+\\s+years?)\\b/i",
+              "/\\b(more\\s+than\\s+\\d+\\s+years?)\\b/i",
+              "/\\b(Award-?winning|Prize-?winning|Best-?selling)\\b/i",
+              "/\\b(Published\\s+(in|author|writer)|Featured\\s+in)\\b/i",
+              "/\\b(Recognized\\s+by|Honored\\s+by|Recipient\\s+of)\\b/i",
+              "/\\b(Member\\s+of|Fellow\\s+of|Inducted\\s+into)\\b/i",
+              "/\\b(Peer-?reviewed|Published\\s+research|Research\\s+scientist)\\b/i",
+              "/\\b(Tenured|Faculty\\s+member|Department\\s+(head|chair))\\b/i"
+            ],
+            "combined_text": "join(\" \") of: authorBioText (if any); schemaAuthor.jobTitle; schemaAuthor.description; each hasCredential string or .name; each alumniOf string or .name; each knowsAbout as String(); then document.body.innerText.substring(0, 5000)"
+          },
+          {
+            "id": "eeat.authoritativeness",
+            "condition": "hasAuthorBio OR hasAuthorLink",
+            "points": "+1",
+            "hasAuthorBio": "true if any of: document has [itemprop=\"author\"]; document has [itemtype*=\"Person\"]; any element matches .author-bio, .about-author, [class*=\"author-bio\"] (selector strings containing author-bio, about-author, itemprop or itemtype); OR authorBioText was captured by author detection (see author_bio_text)",
+            "hasAuthorLink": "true if any element matches a[href*=\"/author/\"], a[href*=\"/about\"], a[href*=\"/contributor/\"], a[href*=\"/writer/\"] (attribute substring match on the raw href)",
+            "not_counted": "Selectors .author-box, [class*=\"author-box\"], .byline, .post-author, .article-author, .contributor, .writer-bio, [rel=\"author\"] set neither flag in detectAuthoritySignals; they only matter through the CSS fallback that can populate authorBioText."
+          },
+          {
+            "id": "eeat.trust",
+            "condition": "trustScore >= 3, where trustScore counts true values among: a[href*=\"/about\"], a[href*=\"/contact\"], a[href*=\"/privacy\"], a[href*=\"/terms\"], (address element OR [itemtype*=\"PostalAddress\"])",
+            "points": "+1"
+          },
+          {
+            "id": "cap",
+            "condition": "score = min(score, 5)",
+            "points": "cap"
+          },
+          {
+            "id": "reference.author_detection_order",
+            "condition": "author_detection_order",
+            "value": [
+              "P1 JSON-LD: for each script[type=\"application/ld+json\"], JSON.parse(textContent) (invalid JSON skipped). parseSchemaForAuthor recursively (depth > 5 stops): arrays -> first item with a name wins; node whose @type includes \"Person\" -> name = extractPersonName (name string trimmed, else givenName + \" \" + familyName); node whose @type is one of Article, BlogPosting, NewsArticle, WebPage, Review, HowTo, Recipe with an author property -> articleHasAuthor = true and name from author (string trimmed, first array element, or Person object name); then @graph items; then, if still no name, any nested object property (excluding @type, @context, @graph) is searched for a Person. So a Person nested anywhere (founder, employee, creator, publisher...) counts as the author. Later script blocks with a name overwrite earlier ones. A non-string name property yields null.",
+              "P2 microdata (only if no name yet): each [itemprop=\"author\"]: name = textContent of descendant [itemprop=\"name\"], else element textContent trimmed if 2-99 chars; bio text = textContent substring 0-2000 if length > 20. Then, if still no name, [itemtype*=\"schema.org/Person\"] elements with a descendant [itemprop=\"name\"].",
+              "P3 meta (always evaluated for hasAuthorMeta): meta[name=\"author\"] content trimmed; else meta[property=\"article:author\"] content; else meta[name=\"twitter:creator\"] content with leading @ stripped. Used only if no name yet.",
+              "P4 text patterns (if no name or no bio text): for each authorSectionPatterns regex that matches body innerText, find the FIRST element in document order among h2, h3, h4, h5, p, div, section, aside whose textContent matches; container = el.closest(\"section, article, aside, div\") (can be el itself) or parentElement; if container textContent length is 21-2999 chars it becomes authorBioText; name = capture group of nameFromContainer regex on container text. Stops at the first pattern that yields bio text.",
+              "P5 CSS fallback (only if no bio text): first element (in authoritySelectors order) whose trimmed textContent is 21-2999 chars becomes authorBioText."
+            ],
+            "points": "n/a"
+          },
+          {
+            "id": "reference.author_section_patterns",
+            "condition": "author_section_patterns",
+            "value": [
+              "/about\\s+the\\s+author/i",
+              "/meet\\s+the\\s+author/i",
+              "/author\\s*:/i",
+              "/written\\s+by/i",
+              "/article\\s+by/i",
+              "/posted\\s+by/i",
+              "/\\bby\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+/i",
+              "/contributor/i",
+              "/bio(?:graphy)?:/i",
+              "/about\\s+[A-Z][a-z]+/i"
+            ],
+            "points": "n/a"
+          },
+          {
+            "id": "reference.name_from_container_regex",
+            "condition": "name_from_container_regex",
+            "value": "/(?:[Bb]y|[Ww]ritten\\s+[Bb]y|[Aa]uthor:?)[ ]+([A-Z][a-z]+(?:[ ]+[A-Z][a-z]+){1,3})/",
+            "points": "n/a"
+          },
+          {
+            "id": "reference.authority_selectors",
+            "condition": "authority_selectors",
+            "value": [
+              "[itemprop=\"author\"]",
+              "[itemtype*=\"Person\"]",
+              "[rel=\"author\"]",
+              ".author-bio",
+              ".author-box",
+              ".about-author",
+              "[class*=\"author-bio\"]",
+              "[class*=\"author-box\"]",
+              ".byline",
+              ".post-author",
+              ".article-author",
+              ".contributor",
+              ".writer-bio",
+              "a[href*=\"/author/\"]",
+              "a[href*=\"/about\"]",
+              "a[href*=\"/contributor/\"]",
+              "a[href*=\"/writer/\"]"
+            ],
+            "points": "n/a"
+          },
+          {
+            "id": "reference.social_profile_patterns",
+            "condition": "social_profile_patterns",
+            "value": [
+              "twitter.com",
+              "linkedin.com",
+              "github.com",
+              "facebook.com"
+            ],
+            "points": "n/a"
+          },
+          {
+            "id": "reference.social_profile_note",
+            "condition": "social_profile_note",
+            "value": "hasSocialProfiles is computed (any a[href] whose resolved href contains one of these) but does NOT affect the score.",
+            "points": "n/a"
+          },
+          {
+            "id": "reference.experience_note",
+            "condition": "experience_note",
+            "value": "experiencePatterns (first-person \"in my experience\", \"I've found\", \"our team\", \"hands-on\", ...) are matched and reported but do NOT affect the score.",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "score >= 4 -> pass; score >= 2 -> warning; else fail.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/content/author.mjs",
+        "source_procedure": "1. Pick the page templates to evaluate. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Evaluate the layout chain that renders a representative content page (blog post/article) and the home page; report per-page if they differ. 2. JSON-LD: collect <script type=\"application/ld+json\"> bodies from templates, plus JSON-LD built in code (Astro set:html={JSON.stringify(obj)}, Next.js <script dangerouslySetInnerHTML> or JSON-LD components, Hugo partials, Eleventy data). Apply parseSchemaForAuthor as described: any Person anywhere (depth <= 5) or an author on Article/BlogPosting/NewsArticle/WebPage/Review/HowTo/Recipe gives a name. If the name is a template variable (e.g. {{ .Params.author }}, {post.data.author}), resolve it from frontmatter/config/site data; if unresolvable, treat as name present but flag. 3. Microdata: grep templates for itemprop=\"author\" and itemtype containing schema.org/Person, and a nested itemprop=\"name\". 4. Meta: grep for <meta name=\"author\">, <meta property=\"article:author\">, <meta name=\"twitter:creator\"> in head templates; Next.js app router: metadata.authors / metadata.twitter.creator in layout/page exports (Next emits meta name=\"author\" from authors); Astro/Hugo/Eleventy SEO components/partials. 5. Trust links: grep all templates (header/footer/nav partials especially) for href values containing \"/about\", \"/contact\", \"/privacy\", \"/terms\" (substring, raw attribute), and for <address> or itemtype containing PostalAddress. Count distinct kinds; >= 3 earns the point. Also check nav data files (e.g. Hugo menus in config, Astro/Next nav arrays) since links are often data-driven. 6. Authority: +1 if trust scan found any href containing \"/about\", \"/author/\", \"/contributor/\" or \"/writer/\", or any class containing author-bio / about-author, or itemprop=\"author\" / itemtype containing Person, or a byline/author-box element with 21-2999 chars of text. 7. Expertise: run the 41 expertisePatterns against the concatenation of author bio text, schema Person jobTitle/description/hasCredential/alumniOf/knowsAbout, and the first ~5000 characters of the page visible text (approximate from the template plus the content file markdown, stripping tags). Note that very common words match (see open_questions), so on any page with meaningful English copy this is nearly always true. 8. Sum as in scoring.rules, cap at 5, map status.",
+        "llm_criteria": "Only the text-pattern name extraction (P4) and the expertise scan depend on rendered visible text. The model should: (a) decide whether visible body copy on a content page contains a byline or author section matching the authorSectionPatterns, and extract \"By First Last\" style names as the regex would (capitalized 2-4 word sequence after By / Written by / Author:, note the regex has no word boundary so \"Nearby Coffee Shop\" yields \"Coffee Shop\"); (b) decide whether the first ~5000 visible characters contain any expertise pattern term (degrees, titles like Founder/Director/Editor/Author/Writer, certifications, Certified/Licensed/Registered, Expert/Specialist/Consultant/Professional, \"N years of experience\", \"Member of\", \"Featured in\", etc.). Mirror the regexes, do not apply a stricter human judgement of genuine expertise."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Meta tags, JSON-LD, microdata and trust links in templates are reliably detectable from source. Divergence comes from: JSON-LD or meta injected client side (SPA, tag managers, Yoast-like plugins at runtime); template variables whose values live in CMS/frontmatter; the expertise scan and text-pattern detection run on rendered innerText (first 5000 chars, which includes nav/header text) that source can only approximate; href substring matching runs on raw attribute values after framework rendering (e.g. Next.js <Link href=\"/about\">, Hugo relURL output); navigation built from data files or fetched menus. The extension evaluates a single page; source audits must choose which templates represent it."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/content.author.md",
+      "fix_summary": "Add meta name=\"author\" and a JSON-LD Person (name, jobTitle, sameAs, worksFor) as author of an Article/BlogPosting in the head/layout (Astro layout, Hugo head partial, Next.js metadata.authors plus a JSON-LD script, Eleventy base layout, static index.html), add a visible byline/author bio block (class author-bio) and ensure header/footer link to /about, /contact, /privacy, /terms. Real author name, credentials and bio text must come from the user.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "author.name.schema",
+        "author.name.microdata",
+        "author.name.meta",
+        "author.name.byline",
+        "author.marker_only",
+        "eeat.expertise",
+        "eeat.authoritativeness.bio",
+        "eeat.authoritativeness.link",
+        "eeat.trust.about",
+        "eeat.trust.contact",
+        "eeat.trust.privacy",
+        "eeat.trust.terms",
+        "eeat.trust.address"
+      ],
+      "extension_source": "src/shared/checks/author-signals-checker.js"
+    },
+    {
+      "id": "content.image-alt",
+      "extension_key": "imageAlt",
+      "name": "Image Alt Text",
+      "category": "content",
+      "weight": 5,
+      "conditional": false,
+      "description": "Measures the share of <img> elements with non-empty alt text. Alt text is how AI crawlers and agents understand image content (and is an accessibility baseline), so missing alt leaves images invisible to them.",
+      "inputs": [
+        "rendered DOM: every img element and its alt attribute"
+      ],
+      "scoring": {
+        "summary": "If there are no img elements: pass, 5. Otherwise percentage = round(100 * imagesWithAlt / totalImages), where an image counts only if alt exists and alt.trim() is non-empty. score = round(percentage / 100 * 5).",
+        "rules": [
+          {
+            "id": "images.none",
+            "condition": "document has 0 img elements",
+            "status": "pass",
+            "points": 5
+          },
+          {
+            "id": "images.alt_coverage",
+            "condition": "img counts as having alt iff getAttribute(\"alt\") !== null and alt.trim().length > 0 (alt=\"\" and whitespace-only count as MISSING)",
+            "points": "score = Math.round(Math.round(100*withAlt/total) / 100 * 5)"
+          },
+          {
+            "condition": "percentage 0-9",
+            "points": 0
+          },
+          {
+            "condition": "percentage 10-29",
+            "points": 1
+          },
+          {
+            "condition": "percentage 30-49",
+            "points": 2
+          },
+          {
+            "condition": "percentage 50-69",
+            "points": 3
+          },
+          {
+            "condition": "percentage 70-89",
+            "points": 4
+          },
+          {
+            "condition": "percentage 90-100",
+            "points": 5
+          }
+        ],
+        "status_mapping": "percentage < 60 -> fail; 60 <= percentage < 90 -> warning; >= 90 -> pass (no images -> pass). Note 50-59% scores 3 but is fail.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/content/image-alt.mjs",
+        "source_procedure": "Enumerate images that end up as <img> on the evaluated page. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Count: literal <img> tags in HTML/templates/partials; Astro <Image>/<Picture> from astro:assets (render <img>, alt is required by the component); Next.js <Image> from next/image (renders <img>); Hugo images in layouts and markdown ![alt](src) rendered by Goldmark (markdown image alt becomes alt attribute; empty ![](x) gives alt=\"\"); Eleventy eleventy-img shortcodes; JSX <img> in React/Vue components; markdown/MDX content files for the page. For each, determine alt: literal non-empty string -> has alt; alt=\"\" or missing -> missing; alt bound to an expression (alt={post.title}, alt=\"{{ .Title }}\") -> treat as has alt unless the source value is clearly empty/undefined. Compute percentage and score per rules. Evaluate per page template (home plus a representative content page) and report per page; if a build output exists, parse built HTML instead."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Literal templates and built HTML give exact parity. Differences arise from images injected by JavaScript (carousels, lazy loaders, third-party widgets, tracking pixels), CMS content images, components that conditionally render images, and dynamic alt expressions that may evaluate to empty strings. The extension counts every img in the live DOM including tracking pixels and widget images the repo does not contain."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/content.image-alt.md",
+      "fix_summary": "Add descriptive alt attributes to each img in templates, components and markdown (e.g. ![Descriptive text](img.png), <Image alt=\"...\">). The plugin can draft alt text from filename/context but a human should confirm; note that marking decorative images alt=\"\" still counts as missing for this check.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "images.none",
+        "images.alt_coverage"
+      ],
+      "extension_source": "src/shared/checks/image-alt-checker.js"
+    },
+    {
+      "id": "content.internal-links",
+      "extension_key": "internalLinking",
+      "name": "Internal Linking",
+      "category": "content",
+      "weight": 4,
+      "conditional": false,
+      "description": "Counts same-host links on the page, separating navigation (nav/header/footer) from in-content links, and penalises generic anchor text such as 'click here' in content. Internal links with descriptive anchors help AI crawlers understand site topology and what each linked page is about.",
+      "inputs": [
+        "rendered DOM: all a[href] elements, their href attribute, innerText and ancestor nav/header/footer/[role=navigation]",
+        "window.location.hostname"
+      ],
+      "scoring": {
+        "summary": "Start at 4. Internal = a[href] whose href is not mailto:/tel:/javascript:/# and whose resolved hostname equals the page hostname exactly. 0 internal links -> -3. Else if content links < 3 AND total internal < 5 -> -1. Generic anchor text on content (non-nav) links -> -0.25 each, max -1. finalScore = max(0, round to 1 decimal); status from unfloored value (>= 3 pass, >= 2 warning, else fail); reported score = floor.",
+        "rules": [
+          {
+            "step": "internal link",
+            "condition": "href attribute (raw) not starting with 'mailto:', 'tel:', 'javascript:' or '#', and new URL(href, window.location.origin).hostname === window.location.hostname (exact, so www vs apex differ; subdomains are external)"
+          },
+          {
+            "step": "nav vs content",
+            "condition": "link.closest('nav, header, footer, [role=\"navigation\"]') -> nav link; otherwise content link"
+          },
+          {
+            "step": "generic anchor",
+            "condition": "text = innerText trimmed lowercased; generic if length < 2 (includes empty, e.g. image-only links) or matches exactly one of: 'click here', 'here', 'read more', 'more', 'link', 'learn more', 'this', 'this link', 'click', 'go', 'see more', 'view', 'details', 'info', '→', '»', '>'"
+          },
+          {
+            "condition": "total internal links === 0",
+            "points": "-3"
+          },
+          {
+            "condition": "else content links < 3 AND total internal links < 5",
+            "points": "-1"
+          },
+          {
+            "condition": "generic content (non-nav) links count N > 0",
+            "points": "-min(N * 0.25, 1)"
+          },
+          {
+            "step": "informational",
+            "condition": "descriptivePercentage, uniqueDestinations (distinct pathnames), navToContentRatio: no score effect"
+          },
+          {
+            "step": "final",
+            "condition": "finalScore = max(0, round(score*10)/10); reported score = floor(finalScore)"
+          }
+        ],
+        "status_mapping": "Based on unfloored finalScore: >= 3 pass, >= 2 warning, else fail. Reported score = Math.floor(finalScore), e.g. 3.75 -> pass/3, 2.5 -> warning/2, 1 (no links) -> fail/1.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/content/internal-links.mjs",
+        "source_procedure": "Per representative page: 1) Assemble effective HTML: static *.html; Astro layout (src/layouts/*.astro) + page (src/pages/**) + components; Hugo layouts/_default/baseof.html + partials + content Markdown (Markdown links become <a>); Eleventy _includes/** layouts + page content; Next.js app/**/layout.tsx + page.tsx (<Link href> and <a href>), pages router _app/_document + page; Vite SPA components rendering the route. 2) Collect all anchors with href (<a href>, framework <Link href>/<NuxtLink to>, Markdown [text](url)). 3) Classify internal: relative URLs and absolute URLs whose host equals the production host (from site/baseURL in astro.config, hugo.toml baseURL, metadataBase, package homepage, CNAME file); exclude mailto:, tel:, javascript:, '#...'. 4) Mark nav links when inside <nav>, <header>, <footer> or role=navigation (including those in layout partials). 5) Compute visible anchor text (text content excluding alt text) and apply the generic list and length < 2 rule. 6) Apply deductions and thresholds."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension sees the rendered DOM including JS-injected links (menus, related posts widgets, CMS content) and uses innerText (hidden text excluded, CSS text-transform can apply). Link hrefs built from variables or data files need resolution. Exact hostname comparison depends on the live host (www vs apex, preview domains), so absolute links to the canonical domain can count as external when the audited URL uses a different host."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/content.internal-links.md",
+      "fix_summary": "Add at least 3 in-content internal links (outside nav/header/footer) to related pages with descriptive anchor text, and replace generic anchors ('read more', 'click here', icon-only links) with descriptive text or visually hidden text in the link. The plugin can rewrite generic anchors using the target page title automatically, but choosing which pages to link needs user or model judgment.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "links.internal.present",
+        "links.internal.content_count",
+        "links.internal.generic_anchor"
+      ],
+      "extension_source": "src/shared/checks/internal-linking-checker.js"
+    },
+    {
+      "id": "content.accessibility",
+      "extension_key": "accessibility",
+      "name": "Accessibility",
+      "category": "content",
+      "weight": 4,
+      "conditional": false,
+      "description": "Checks basic semantic structure: a <main> landmark, a <nav> landmark, labelled form inputs, and a minimum count of semantic elements. Semantic landmarks help AI parsers and agents locate the main content and navigation, and are a foundation for accessibility.",
+      "inputs": [
+        "rendered DOM body: semantic elements, ARIA roles/attributes, form inputs and labels, skip links"
+      ],
+      "scoring": {
+        "summary": "Start at 4. Deduct 1.75 if no <main> or [role=\"main\"]; 0.75 if no <nav> or [role=\"navigation\"]; 0.75 if fewer than 50% of visible form inputs are labelled (only when inputs exist); 0.75 if total semantic element count < 5 AND no main. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore). ARIA counts and skip link are informational only.",
+        "rules": [
+          {
+            "condition": "semantic element count = number of elements matching each of: main, nav, article, section, aside, header, footer, figure, figcaption (summed)",
+            "points": "n/a"
+          },
+          {
+            "condition": "no <main> element and no [role=\"main\"]",
+            "points": "-1.75"
+          },
+          {
+            "condition": "no <nav> element and no [role=\"navigation\"]",
+            "points": "-0.75"
+          },
+          {
+            "condition": "inputs = 'input:not([type=\"hidden\"]), textarea, select'; an input is labelled if it has an id with a matching label[for=id], or a non-empty aria-label, or a non-empty aria-labelledby, or is inside a <label>. If inputs exist and round(labelled/inputs*100) < 50",
+            "points": "-0.75"
+          },
+          {
+            "condition": "semanticCount < 5 AND no main (hasMain false)",
+            "points": "-0.75"
+          },
+          {
+            "condition": "ARIA counts ([role=main|navigation|banner|contentinfo|search|complementary], [aria-label], [aria-labelledby], [aria-describedby])",
+            "points": "0 (informational)"
+          },
+          {
+            "condition": "skip link: a[href^=\"#main\"], a[href^=\"#content\"], .skip-link, .skip-to-content",
+            "points": "0 (informational)"
+          },
+          {
+            "condition": "finalScore = max(0, round(score*10)/10); reported score = Math.floor(finalScore)",
+            "points": "n/a"
+          }
+        ],
+        "status_mapping": "Using decimal finalScore: >= 3 pass, >= 2 warning, else fail. Reported points = floor. Reachable outcomes: 4 pass (no issues); 3.25 pass/3 (missing nav or poor labels); 2.5 warning/2 (nav + labels missing); 2.25 warning/2 (missing main only, >= 5 semantic elements); 1.5 fail/1 (missing main, <5 semantic, or main+nav); 0.75 fail/0; 0 fail/0.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/content/accessibility.mjs",
+        "source_procedure": "Evaluate the full page markup that composes each route: layout + page + components. Static HTML: each *.html. Astro: src/layouts/*.astro plus src/pages/** and imported src/components/**. Hugo: layouts/_default/baseof.html, single.html, list.html, partials/**. Eleventy: _includes/** layouts plus page templates. Next.js: app/**/layout.tsx + page.tsx and components (JSX tags <main>, <nav>, role=\"main\"); pages router: _app/_document + pages/**. Vite SPA: index.html is usually just <div id=\"app\">, so inspect root components (src/App.vue|tsx, router views). Count tags and role attributes, check form inputs for labels, then apply the deductions."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension counts elements in the live DOM after JavaScript, including third-party widgets (cookie banners, chat widgets with unlabeled inputs) that are not in the repo. Component frameworks may render <main>/<nav> from library components whose names do not reveal the tag. Conditionally rendered elements may be present or absent at runtime."
+      },
+      "fixable": "auto",
+      "fix_recipe": "fix-recipes/content.accessibility.md",
+      "fix_summary": "Wrap the primary content in <main> and site navigation in <nav> in the base layout (Astro layout, Hugo baseof.html, Eleventy base layout, Next.js root layout.tsx, Vite App component); add <label for> or aria-label to form inputs. Adding main alone removes the largest deduction.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "a11y.landmark.main",
+        "a11y.landmark.nav",
+        "a11y.forms.labels",
+        "a11y.semantic.count",
+        "a11y.skip_link"
+      ],
+      "extension_source": "src/shared/checks/accessibility-checker.js"
+    },
+    {
+      "id": "agent-readiness.server-rendered",
+      "extension_key": "serverRendered",
+      "name": "Server-Rendered Content",
+      "category": "agent-readiness",
+      "weight": 6,
+      "conditional": false,
+      "description": "Compares the raw HTML the server returns (no JavaScript) with the rendered DOM to see how much of the visible text, the H1 and the title exist before hydration. Most AI crawlers and agents do not execute JavaScript, so client-only content is invisible to them.",
+      "inputs": [
+        "raw HTML of the page via plain GET (status, content-type, body, redirected, truncated)",
+        "rendered DOM: document.body text, first <h1>, document.title"
+      ],
+      "scoring": {
+        "summary": "Fetch raw HTML. Unreachable or non-200 -> warning 3 (inconclusive). Non-HTML content-type -> pass 6. Otherwise parse raw HTML, count words in raw body and rendered body (removing script, style, noscript, template, svg). ratio = raw/dom capped at 1 (1 if dom < 30 words). Start 6: empty SPA root in raw HTML -> 0; else ratio < 0.25 -> 0; else ratio < 0.6 -> 3. Then -1 if rendered H1 is missing from raw HTML, -1 if rendered title missing from raw HTML, floor at 0. Status >= 5 pass, >= 3 warning, else fail; a fail on a redirected or truncated fetch is raised to warning 3.",
+        "rules": [
+          {
+            "condition": "isUnreachable(page): status 0, 403, 429, 503 or timedOut (fetch timeout 3000 ms)",
+            "status": "warning",
+            "points": 3,
+            "inconclusive": true
+          },
+          {
+            "condition": "page.status !== 200 (e.g. 404, 500, 401)",
+            "status": "warning",
+            "points": 3,
+            "inconclusive": true
+          },
+          {
+            "condition": "Content-Type present and does not match /text\\/html|application\\/xhtml/i",
+            "status": "pass",
+            "points": 6,
+            "note": "missing Content-Type is treated as HTML"
+          },
+          {
+            "step": "word counts",
+            "condition": "clone body, remove 'script, style, noscript, template, svg', textContent, trim, split /\\s+/. rawWordCount from DOMParser-parsed raw HTML body; domWordCount from live document.body."
+          },
+          {
+            "step": "ratio",
+            "condition": "ratio = 1 if domWordCount < 30, else min(1, rawWordCount / domWordCount)"
+          },
+          {
+            "step": "empty app root",
+            "condition": "first selector in order ['#root', '#app', '#__next', '#__nuxt', '#___gatsby', '#svelte', '#q-app', '[data-reactroot]'] whose FIRST matching element in raw HTML has textContent.trim() === ''"
+          },
+          {
+            "condition": "empty app root found",
+            "points": "score = 0"
+          },
+          {
+            "condition": "else ratio < 0.25",
+            "points": "score = 0"
+          },
+          {
+            "condition": "else ratio < 0.6",
+            "points": "score = 3"
+          },
+          {
+            "condition": "else (ratio >= 0.6)",
+            "points": "score = 6"
+          },
+          {
+            "condition": "rendered DOM has an <h1> with non-empty text AND raw HTML has no <h1> element at all",
+            "points": "-1"
+          },
+          {
+            "condition": "document.title non-empty AND raw HTML <title> empty or missing",
+            "points": "-1"
+          },
+          {
+            "step": "clamp",
+            "condition": "score = max(0, score)"
+          },
+          {
+            "condition": "score >= 5",
+            "status": "pass"
+          },
+          {
+            "condition": "score >= 3",
+            "status": "warning"
+          },
+          {
+            "condition": "score < 3",
+            "status": "fail"
+          },
+          {
+            "condition": "status fail AND (page.redirected OR page.truncated (body > 2 MB default cap))",
+            "status": "warning",
+            "points": 3
+          },
+          {
+            "condition": "exception thrown",
+            "status": "fail",
+            "points": 0
+          }
+        ],
+        "status_mapping": "score >= 5 pass, 3-4 warning, 0-2 fail; fail downgraded to warning with score 3 when the raw fetch was redirected or truncated; unreachable and non-200 are warning 3.",
+        "inconclusive": "Unreachable (0/403/429/503/timeout) or any non-200 status returns warning with score 3 of 6 and details.inconclusive true; never a fail."
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/agent-readiness/server-rendered.mjs",
+        "source_procedure": "1) Identify rendering mode per stack. Static HTML: raw == rendered unless scripts inject content; inspect body. Astro: default static/SSR output is server-rendered; flag components with client:only (render nothing server-side) and pages whose main content is in a client:only island. Hugo/Eleventy: static output, server-rendered unless a JS framework mounts into an empty div. Next.js: app router server components render HTML; flag pages that are 'use client' with data fetched in useEffect, dynamic(() => ..., { ssr: false }) around main content, or output: 'export' pages with empty shells; pages router: getServerSideProps/getStaticProps render HTML, pure client fetching does not. Vite SPA (React/Vue/Svelte without SSR): index.html has an empty <div id=\"root\"> or <div id=\"app\"> -> score 0. 2) Where a build is possible, build and inspect the output HTML (dist/, out/, public/ for Hugo, _site/ for Eleventy, .next/server/app/*.html) and compute rawWordCount from it. 3) Check the output HTML for the app-root selectors with empty text, for an <h1> element and non-empty <title>. 4) Estimate rendered word count from the source components/content; if raw >= 60% of it, full credit. 5) Apply penalties and thresholds exactly.",
+        "llm_criteria": "Decide whether the page's main text, H1 and <title> are emitted in server HTML or only after client JavaScript runs. Estimate the share of final visible words present in server HTML and bucket it: < 25% -> 0, 25-59% -> 3, >= 60% -> 6. Any SPA mount node from the selector list that is empty in server HTML is an automatic 0 (even if other content exists)."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension diffs a live fetch against the live DOM; from source, the rendered DOM must be estimated. Middleware, edge rendering, A/B scripts, CMS content, consent walls, bot-specific responses and host behavior (redirects, 404/401 pages, compression) are invisible to source analysis. Building the site gives near-exact raw HTML for static generators, but the rendered word count still needs estimation when client JS adds content."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/agent-readiness.server-rendered.md",
+      "fix_summary": "Serve meaningful HTML without JavaScript: use SSR/SSG or prerendering (Astro default output instead of client:only, Next.js server components or getStaticProps instead of useEffect fetching or ssr:false, vite-plugin-ssr/prerender or a static generator for Vite SPAs), and make sure <h1> and <title> are in the server HTML (Next metadata export, Astro/Hugo layouts). These are architectural changes the plugin can outline or partially apply but the user must approve.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "agent.ssr.text_ratio",
+        "agent.ssr.app_root_empty",
+        "agent.ssr.h1_in_raw",
+        "agent.ssr.title_in_raw"
+      ],
+      "extension_source": "src/shared/checks/server-rendered-checker.js"
+    },
+    {
+      "id": "agent-readiness.markdown",
+      "extension_key": "markdownForAgents",
+      "name": "Markdown for Agents",
+      "category": "agent-readiness",
+      "weight": 5,
+      "conditional": false,
+      "description": "Checks whether the page offers a Markdown representation to AI agents: via HTTP content negotiation (Accept: text/markdown), an advertised alternate (<link rel=alternate type=text/markdown> or Link header), or an undiscoverable .md sibling file. Markdown gives agents the same content at a fraction of the tokens of HTML.",
+      "inputs": [
+        "HTTP GET of page with 'Accept: text/markdown, text/html;q=0.9' (status, Content-Type, Link, Vary, X-Markdown-Tokens headers)",
+        "rendered DOM <link rel~=alternate type=text/markdown|text/x-markdown>",
+        "HTTP GET of .md probe URL (1500 ms timeout)"
+      ],
+      "scoring": {
+        "summary": "Tiered, first match wins: (0) negotiated request unreachable => warning 3 inconclusive; (1) negotiated response ok AND Content-Type matches /text\\/markdown/i => pass 5; (2) Link header advertises markdown alternate OR DOM has a markdown alternate <link> => warning 3; (3) .md probe returns non-HTML markdown => warning 2; (4) otherwise fail 0. Vary: Accept and X-Markdown-Tokens are recorded but not scored.",
+        "rules": [
+          {
+            "condition": "probe URL: strip query and hash; path '' or '/' => '/index.md'; last path segment contains '.' => no probe (null); else pathname with trailing '/' removed + '.md'",
+            "points": "n/a"
+          },
+          {
+            "condition": "isUnreachable(negotiation): status in [0, 403, 429, 503] or timedOut (3000 ms page timeout)",
+            "status": "warning",
+            "points": 3,
+            "inconclusive": true
+          },
+          {
+            "condition": "negotiation.ok AND Content-Type header matches /text\\/markdown/i",
+            "status": "pass",
+            "points": 5
+          },
+          {
+            "condition": "Link response header matches /text\\/markdown/i AND /rel=\"?alternate\"?/i (tested independently on the whole header string) OR document.querySelector('link[rel~=\"alternate\"][type=\"text/markdown\"], link[rel~=\"alternate\"][type=\"text/x-markdown\"]') exists",
+            "status": "warning",
+            "points": 3
+          },
+          {
+            "condition": "probe response ok AND NOT HTML (Content-Type not /text\\/html|application\\/xhtml/i and body not /^\\s*<(!doctype|html)/i) AND (Content-Type matches /markdown/i OR body matches /^\\s*#\\s+\\S/)",
+            "status": "warning",
+            "points": 2
+          },
+          {
+            "condition": "none of the above",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "exception thrown anywhere",
+            "status": "fail",
+            "points": 0
+          }
+        ],
+        "status_mapping": "Fixed per tier: 5 pass, 3 warning, 2 warning, 0 fail.",
+        "inconclusive": "If the Accept: text/markdown request is unreachable (status 0/403/429/503 or timed out), returns warning with 3 points and details.inconclusive = true, regardless of DOM alternate or probe results."
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/agent-readiness/markdown.mjs",
+        "source_procedure": "Tier 1 (negotiation) is server behaviour: look for evidence in host/server config - Cloudflare 'Markdown for Agents' is a zone setting (not in repo); check functions/_middleware.(js|ts) (Cloudflare Pages), middleware.ts (Next.js/Vercel), netlify/edge-functions/**, vercel.json 'rewrites'/'has' on header accept, nginx/Caddy configs, or server code that branches on Accept: text/markdown and sets Content-Type: text/markdown. If found, assume pass (unverified). Tier 2: grep page templates/head for <link rel=\"alternate\" type=\"text/markdown\" (static HTML *.html; Astro src/layouts/*.astro; Hugo layouts/_default/baseof.html, layouts/partials/head*.html, or outputFormats markdown in hugo.toml with alternate output; Eleventy _includes/**; Next.js app router metadata.alternates.types['text/markdown'] in app/**/layout.tsx|page.tsx, pages router <Head> in _document/_app; Vite index.html), and for Link headers containing text/markdown and rel=alternate in _headers (Netlify/Cloudflare Pages), netlify.toml [[headers]], vercel.json headers. Tier 3: check whether a .md file will be served at <path>.md or /index.md (public/**/*.md, static/**/*.md, Hugo markdown output format, build output) that starts with '# Heading' or will get a markdown Content-Type.",
+        "llm_criteria": "Judge whether any server/edge code or host config found actually returns Content-Type text/markdown when the request Accept header contains text/markdown for the audited page (not just for a single API route). If unsure, do not award tier 1; fall back to tiers 2/3."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Content negotiation is a runtime server/CDN property (often a Cloudflare dashboard toggle) and usually invisible in the repo, so source can under-report tier 1. DOM alternate links injected by JavaScript are seen by the extension but not in static templates. The .md probe depends on the host serving .md files with a non-HTML content type and on SPA fallbacks not returning index.html. Unreachable/WAF cases (inconclusive 3) cannot be reproduced from source."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/agent-readiness.markdown.md",
+      "fix_summary": "Auto-add <link rel=\"alternate\" type=\"text/markdown\" href=\"/page.md\"> to the head template (or Next.js metadata.alternates.types) and a Link header via _headers / netlify.toml / vercel.json, plus generate .md copies of pages at build time; this reaches 3/5. Full 5/5 needs server or edge content negotiation (Cloudflare Markdown for Agents toggle, a Pages/_middleware or Next.js middleware that returns text/markdown for Accept: text/markdown), which the user must enable or approve.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "markdown.negotiation",
+        "markdown.alternate.link_tag",
+        "markdown.alternate.link_header",
+        "markdown.md_variant",
+        "markdown.vary_accept"
+      ],
+      "extension_source": "src/shared/checks/markdown-for-agents-checker.js"
+    },
+    {
+      "id": "agent-readiness.controls",
+      "extension_key": "agentControls",
+      "name": "Agent-Usable Controls",
+      "category": "agent-readiness",
+      "weight": 4,
+      "conditional": false,
+      "description": "Checks that interactive controls are operable through the accessibility tree, which is how browsing agents act on a page: buttons have accessible names and are focusable, links have real hrefs, click handlers are not on bare divs/spans, and personal-data inputs declare autocomplete. An icon-only button or an href-less link is invisible as an action to an agent.",
+      "inputs": [
+        "rendered DOM: button, [role=\"button\"], input[type=submit|button|reset|image]",
+        "rendered DOM: all <a> elements and their href/aria/name/id/onclick attributes",
+        "rendered DOM: div/span/li/p/img/td elements with an inline onclick attribute",
+        "rendered DOM: all <input> elements with type, name, id, autocomplete",
+        "hidden / aria-hidden=\"true\" attributes on elements and ancestors"
+      ],
+      "scoring": {
+        "summary": "Four categories, 1 point each. Elements inside (or being) [hidden] or [aria-hidden=\"true\"] are ignored. For each category: if it has 0 elements it earns 1 point; otherwise it earns 1 point when Math.round((total - problems) / total * 100) >= 90. If all four categories are empty the check passes with 4 and a 'no interactive controls' message.",
+        "rules": [
+          {
+            "condition": "buttons: elements = 'button, [role=\"button\"], input[type=\"submit\"], input[type=\"button\"], input[type=\"reset\"], input[type=\"image\"]' not hidden. Problem (max one per element) if no accessible name, OR role=\"button\" on a non-native element (native = button, input, select, textarea, summary, a[href]) without a tabindex attribute",
+            "points": "+1 if pass rate >= 90% or no buttons"
+          },
+          {
+            "condition": "accessible name order: non-blank aria-label; text of elements referenced by aria-labelledby ids; trimmed textContent (includes visually hidden text); title; value attribute; alt attribute; descendant img[alt] with non-blank alt; descendant 'svg > title' text; input type submit/reset with nothing else still counts as named",
+            "points": "definition"
+          },
+          {
+            "condition": "links: all <a> except role=\"button\" and hidden ones. Problem if href is missing, blank, exactly '#', or starts with 'javascript:' (case-insensitive, trimmed), UNLESS the anchor has aria-haspopup or aria-expanded, OR it is a named anchor (has name or id, has no text content, and has no onclick)",
+            "points": "+1 if pass rate >= 90% or no links"
+          },
+          {
+            "condition": "fakeClickables: 'div[onclick], span[onclick], li[onclick], p[onclick], img[onclick], td[onclick]' that have no role attribute at all and are not hidden. Problem if no tabindex attribute",
+            "points": "+1 if pass rate >= 90% or none",
+            "note": "Only literal inline onclick attributes; listeners attached with addEventListener or framework handlers (React onClick, Vue @click, Svelte on:click, Alpine @click) are not visible and never count"
+          },
+          {
+            "condition": "autocomplete: <input> elements not hidden. Candidate if type (lowercased, default 'text') is not in ['hidden','password','search','checkbox','radio','submit','button','reset','file','image','range','color'] AND (type is 'email' or 'tel' OR `${name} ${id}` matches /(^|[-_ ])(f(irst)?name|l(ast)?name|fullname|surname|address|street|city|zip|postal|postcode|phone|tel|email|country|state|company|organization)/i). Problem if autocomplete attribute is missing, blank, or 'off'",
+            "points": "+1 if pass rate >= 90% or no candidates"
+          },
+          {
+            "condition": "all four categories have total 0",
+            "status": "pass",
+            "points": 4
+          }
+        ],
+        "status_mapping": "score 4 pass, 2-3 warning, 0-1 fail.",
+        "inconclusive": null
+      },
+      "detect": {
+        "method": "script",
+        "script": "checks/agent-readiness/controls.mjs",
+        "source_procedure": "Prefer scanning built HTML output (dist/, _site/, public/ after hugo, out/ or .next prerendered HTML) with an HTML parser and applying the rules exactly. Without a build, scan markup sources: static *.html; Astro src/**/*.astro (template part after frontmatter); Hugo layouts/**/*.html and shortcodes; Eleventy _includes/** and src/** templates (njk, liquid, md with HTML); Next.js/React app/**, pages/**, components/**/*.tsx|jsx (map JSX: className ignored, aria-label/aria-labelledby/title/alt/tabIndex=tabindex/autoComplete=autocomplete, href; React onClick does NOT render an onclick attribute so do not count it as a fake clickable); Vite SPA index.html plus src/** components. For each file collect buttons, anchors, inline onclick elements, and inputs; skip elements inside hidden or aria-hidden=\"true\" wrappers; compute per-category pass rate per page (or per component when pages cannot be composed) and apply the >= 90% threshold. When labels come from expressions ({t('save')}, {{ .Title }}), treat as named if the expression yields text."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "The extension sees the live DOM, including controls rendered by client JS, third-party widgets (chat bubbles, cookie banners, embeds) and CMS content, all of which are absent from source. Per-page percentages depend on how components compose into a page, so component-level source scans can differ from the per-URL result. CSS-hidden elements are counted by both (only hidden/aria-hidden are excluded)."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/agent-readiness.controls.md",
+      "fix_summary": "Add autocomplete tokens (email, tel, given-name, family-name, street-address, postal-code, country-name, organization) to personal-data inputs; give icon-only buttons aria-label or visually hidden text; replace href-less or '#'/javascript: anchors with <button> or real hrefs; replace div/span onclick with <button> or add role/tabindex. Autocomplete and tabindex are auto-fixable in templates; label wording and link targets need user confirmation.",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "agent.controls.buttons.named_focusable",
+        "agent.controls.links.real_href",
+        "agent.controls.no_fake_clickables",
+        "agent.controls.inputs.autocomplete"
+      ],
+      "extension_source": "src/shared/checks/agent-controls-checker.js"
+    },
+    {
+      "id": "agent-readiness.protocols",
+      "extension_key": "agentProtocols",
+      "name": "Agent Protocol Discovery",
+      "category": "agent-readiness",
+      "weight": 6,
+      "conditional": true,
+      "description": "Checks whether the site publishes machine-readable discovery artifacts (MCP server card, A2A agent card, agent skills index, RFC 9727 API catalog, OpenAPI, OAuth metadata, /.well-known/ai) or declarative WebMCP tool annotations, so AI agents can find and use its tools and APIs without reading docs. Conditional: returns 'na' (removed from the score denominator) when the site shows no API or agent surface.",
+      "inputs": [
+        "HTTP GET of 11 well-known / discovery paths on the page origin (body, status, content-type)",
+        "rendered DOM: a[href] (first 500), link[rel~=service-desc|describedby], script[type=application/ld+json], elements with [toolname] or [tooldescription]",
+        "page URL (hostname for same-site comparison)"
+      ],
+      "scoring": {
+        "summary": "Probes 11 paths (concurrency 6, 1500 ms timeout each). A probe counts as found only if response.ok, the body is not HTML, and the path's validator passes on the parsed JSON. Found artifacts are grouped into categories (mcp, a2a, skills, api, oauth, ai) and WebMCP annotations add a 'webmcp' category. Score is by number of distinct categories: 3+ -> 6 pass, 2 -> 5 pass, 1 -> 3 warning. If none found: if every probe was unreachable -> na (inconclusive); else if the page shows same-site API evidence -> fail 0; else -> na (not applicable, excluded from denominator).",
+        "rules": [
+          {
+            "step": "probe",
+            "condition": "GET each path on origin with backgroundFetch(method GET, timeoutMs 1500), bounded concurrency 6. Order of ARTIFACTS list below."
+          },
+          {
+            "step": "classify",
+            "condition": "contentType = Content-Type header (case-insensitive). isHtml = /text\\/html|application\\/xhtml/i on content-type OR body matches /^\\s*<(!doctype|html)/i. If body non-empty and not HTML, JSON.parse(body); json = null on parse failure."
+          },
+          {
+            "step": "hit rule",
+            "condition": "artifact found only when probe.ok (2xx) AND NOT isHtml AND validator(json, probe) returns true (exceptions -> false)"
+          },
+          {
+            "artifact": "/.well-known/mcp/server-card.json",
+            "category": "mcp",
+            "label": "MCP server card",
+            "validator": "json is a non-array object"
+          },
+          {
+            "artifact": "/.well-known/mcp.json",
+            "category": "mcp",
+            "label": "MCP server card",
+            "validator": "json is a non-array object"
+          },
+          {
+            "artifact": "/.well-known/agent-card.json",
+            "category": "a2a",
+            "label": "A2A agent card",
+            "validator": "json is a non-array object with truthy 'name'"
+          },
+          {
+            "artifact": "/.well-known/agent.json",
+            "category": "a2a",
+            "label": "Agent card",
+            "validator": "json is a non-array object with truthy 'name'"
+          },
+          {
+            "artifact": "/.well-known/agent-skills/index.json",
+            "category": "skills",
+            "label": "Agent skills index",
+            "validator": "json is an object or an array"
+          },
+          {
+            "artifact": "/.well-known/api-catalog",
+            "category": "api",
+            "label": "API catalog (RFC 9727)",
+            "validator": "json is an object with truthy 'linkset' OR content-type matches /linkset/i"
+          },
+          {
+            "artifact": "/.well-known/openapi.json",
+            "category": "api",
+            "label": "OpenAPI document",
+            "validator": "json object with truthy 'openapi' or 'swagger'"
+          },
+          {
+            "artifact": "/openapi.json",
+            "category": "api",
+            "label": "OpenAPI document",
+            "validator": "json object with truthy 'openapi' or 'swagger'"
+          },
+          {
+            "artifact": "/.well-known/oauth-authorization-server",
+            "category": "oauth",
+            "label": "OAuth authorization server metadata",
+            "validator": "json object with truthy 'issuer'"
+          },
+          {
+            "artifact": "/.well-known/oauth-protected-resource",
+            "category": "oauth",
+            "label": "OAuth protected resource metadata (RFC 9728)",
+            "validator": "json object with truthy 'resource'"
+          },
+          {
+            "artifact": "/.well-known/ai",
+            "category": "ai",
+            "label": "AI metadata",
+            "validator": "not HTML and body.trim() non-empty (any text format, JSON not required)"
+          },
+          {
+            "step": "webmcp",
+            "condition": "document.querySelectorAll('[toolname], [tooldescription]').length > 0",
+            "effect": "adds category 'webmcp'"
+          },
+          {
+            "condition": "distinct categories >= 3",
+            "status": "pass",
+            "points": 6
+          },
+          {
+            "condition": "distinct categories == 2",
+            "status": "pass",
+            "points": 5
+          },
+          {
+            "condition": "distinct categories == 1",
+            "status": "warning",
+            "points": 3
+          },
+          {
+            "condition": "0 categories AND every probe isUnreachable (status 0, 403, 429, 503, or timedOut)",
+            "status": "na",
+            "applicable": false,
+            "points": 0,
+            "note": "details.inconclusive = true; checked BEFORE API evidence"
+          },
+          {
+            "condition": "0 categories AND at least one probe reached AND findApiEvidence() non-empty",
+            "status": "fail",
+            "points": 0
+          },
+          {
+            "condition": "0 categories AND at least one probe reached AND no API evidence",
+            "status": "na",
+            "applicable": false,
+            "points": 0
+          },
+          {
+            "step": "findApiEvidence",
+            "condition": "Scan first 500 a[href]; resolve against page URL; keep only same-site links (lowercase, strip leading 'www.' from both hosts; equal, or one endsWith '.'+other). Evidence if first path segment (lowercased) is one of [api, apis, developer, developers, docs, documentation, graphql, swagger, openapi, api-docs, api-reference] OR link hostname matches /^(api|apis|developers?|docs)\\./i. Collect up to 5 unique origin+pathname samples."
+          },
+          {
+            "step": "findApiEvidence (cont.)",
+            "condition": "Also evidence: any link[rel~=\"service-desc\"] or link[rel~=\"describedby\"]; any script[type=\"application/ld+json\"] whose text matches /\"@type\"\\s*:\\s*\"WebAPI\"/i"
+          },
+          {
+            "condition": "any exception thrown",
+            "status": "fail",
+            "points": 0
+          }
+        ],
+        "status_mapping": "Explicit per branch: 1 category -> warning (3); 2 -> pass (5); 3+ -> pass (6); none found + API evidence -> fail (0); none found + no evidence or all probes unreachable -> na with applicable:false (maxScore 6 removed from the 138 denominator by ScoringEngine).",
+        "inconclusive": "If no artifact is found and ALL 11 probes are unreachable (status 0/403/429/503 or timed out), returns status 'na', applicable false, details.inconclusive true, score 0 - so it is excluded from the denominator rather than half credit. If at least one probe was reached, unreachable individual probes are simply treated as not found."
+      },
+      "detect": {
+        "method": "hybrid",
+        "script": "checks/agent-readiness/protocols.mjs",
+        "source_procedure": "1) Locate the static/public root per stack: static HTML: repo root or build dir; Astro: public/; Hugo: static/; Eleventy: passthrough-copied dirs from .eleventy.js (addPassthroughCopy) or src/; Next.js: public/ plus app/.well-known/**/route.ts or pages/api; Vite SPA: public/. 2) For each of the 11 paths, check whether a file exists at <publicRoot><path> (also route handlers producing it, e.g. Next app/.well-known/api-catalog/route.ts, Astro src/pages/.well-known/*.json.ts, Hugo content/layouts outputs). 3) Parse the file and apply the exact validator (object, name, linkset, openapi/swagger, issuer, resource; /.well-known/ai any non-empty non-HTML text). For /.well-known/api-catalog (no extension) also check host config (_headers, netlify.toml, vercel.json headers) for Content-Type containing 'linkset' as an alternate pass. 4) Check host rewrite config (_redirects, vercel.json rewrites, netlify.toml) for SPA catch-all rewrites that would serve index.html for missing paths (those are HTML and never count). 5) Grep templates/layouts/components for attributes toolname= or tooldescription= (WebMCP). 6) Count distinct categories and score. 7) If zero: scan templates for same-site links whose first path segment is in the API list or whose host is api./apis./developer(s)./docs. subdomain of the site domain, for <link rel=service-desc|describedby>, and JSON-LD with @type WebAPI; also consider presence of an actual API in the repo (pages/api, app/api, openapi.yaml). Evidence -> fail 0; none -> na.",
+        "llm_criteria": "Judge only for the no-artifact case: does the site have a developer or API surface? Mirror the extension: same-site links to /api, /apis, /developer(s), /docs, /documentation, /graphql, /swagger, /openapi, /api-docs, /api-reference (first segment only) or to api./apis./developer(s)./docs. subdomains; a service-desc/describedby link; a WebAPI JSON-LD entity. Links to third-party APIs or anchor text alone do NOT count. The extension only inspects the analyzed page's links, so for parity evaluate the site's main layout/nav/footer plus the target page."
+      },
+      "parity": {
+        "level": "partial",
+        "note": "Artifacts can be served dynamically (edge functions, reverse proxies to an API host, framework route handlers) or set by the host, and Content-Type (relevant for api-catalog linkset and HTML detection) is decided by the server. API evidence in the extension is evaluated on the single rendered page, so links injected by JS or present only on other pages differ. WebMCP attributes added at runtime by JS are visible to the extension (rendered DOM) but may not be in source. The 'all probes unreachable' na branch cannot be reproduced from source."
+      },
+      "fixable": "assisted",
+      "fix_recipe": "fix-recipes/agent-readiness.protocols.md",
+      "fix_summary": "Publish discovery JSON under the public root (public/.well-known/ for Astro/Next/Vite, static/.well-known/ for Hugo, passthrough for Eleventy): e.g. /.well-known/api-catalog linkset (served with Content-Type application/linkset+json via _headers, netlify.toml or vercel.json headers), /.well-known/openapi.json, an MCP server card at /.well-known/mcp/server-card.json, and OAuth metadata if auth is used. Content (endpoints, auth servers, tool list) must come from the user, so the plugin drafts skeletons only; for content-only sites, no fix is needed (na).",
+      "stacks": [
+        "static-html",
+        "astro",
+        "hugo",
+        "eleventy",
+        "vite-spa"
+      ],
+      "sub_ids": [
+        "agent.protocols.mcp",
+        "agent.protocols.a2a",
+        "agent.protocols.skills",
+        "agent.protocols.api_catalog",
+        "agent.protocols.openapi",
+        "agent.protocols.oauth",
+        "agent.protocols.ai_metadata",
+        "agent.protocols.webmcp",
+        "agent.protocols.api_evidence",
+        "agent.protocols.applicable"
+      ],
+      "extension_source": "src/shared/checks/agent-protocols-checker.js"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # AEOTester Site Audit
 
-Audit and auto-fix your website for AI search (AEO) and broken links - right inside Claude Code. 138-point checklist, schema markup, llms.txt, AI crawler rules.
+Audit and auto-fix your website for AI search (AEO) and broken links - right inside Claude Code. 26 checks, 138 points: schema markup, llms.txt, AI crawler rules.
 
 > Status: early development (v0.1 scaffold). The commands exist but do not do anything useful yet.
 

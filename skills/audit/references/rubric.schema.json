@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEOTester rubric",
+  "type": "object",
+  "required": ["name", "version", "license", "attribution", "source", "max_score", "scoring", "stacks", "categories", "checks"],
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "license": { "const": "CC-BY-4.0" },
+    "max_score": { "type": "integer" },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description", "max"],
+        "properties": { "id": { "type": "string" }, "max": { "type": "integer" } }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "extension_key", "name", "category", "weight", "conditional", "description", "inputs", "scoring", "detect", "parity", "fixable", "fix_recipe", "fix_summary", "stacks", "sub_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z-]+\\.[a-z0-9.-]+$" },
+          "weight": { "type": "integer", "minimum": 1 },
+          "conditional": { "type": "boolean" },
+          "scoring": {
+            "type": "object",
+            "required": ["summary", "rules", "status_mapping"]
+          },
+          "detect": {
+            "type": "object",
+            "required": ["method", "source_procedure"],
+            "properties": {
+              "method": { "enum": ["script", "llm", "hybrid", "live-only"] },
+              "script": { "type": "string" },
+              "llm_criteria": { "type": ["string", "null"] }
+            }
+          },
+          "parity": {
+            "type": "object",
+            "required": ["level", "note"],
+            "properties": { "level": { "enum": ["full", "partial", "none"] } }
+          },
+          "fixable": { "enum": ["auto", "assisted", "report-only"] },
+          "fix_recipe": { "type": ["string", "null"] },
+          "stacks": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
