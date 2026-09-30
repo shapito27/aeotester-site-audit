@@ -13,17 +13,11 @@
     "AI bot list: keys of src/data/robots.json (ai-robots-txt project)"
   ],
   "scoring": {
-    "summary": "If robots.txt, the page and the Markdown-negotiated page were ALL unreachable -> warning 2 (inconclusive). Otherwise, parse Content-Signal lines in robots.txt and the content-signal header (page response first, else markdown response). If at least one recognised key=value pair is found in either -> pass 3. Else if robots.txt has a User-agent line naming any known AI bot -> warning 1. Else fail 0.",
+    "summary": "Parse Content-Signal lines in robots.txt (served root) and a Content-Signal header from host config for '/' (_headers, vercel.json, netlify.toml). At least one valid key=yes|no pair in either -> 3 (predicted when it comes only from the header). Else, if robots.txt is generated and cannot be read -> 2 inconclusive. Else if robots.txt has a User-agent line naming any AI bot -> 1. Else 0.",
     "rules": [
       {
-        "condition": "isUnreachable(robotsResponse) AND isUnreachable(pageResponse) AND isUnreachable(markdownResponse) (status 0/403/429/503 or timedOut; a null robots response counts as unreachable)",
-        "status": "warning",
-        "points": 2,
-        "inconclusive": true
-      },
-      {
         "step": "robots.txt parsing",
-        "condition": "robots.txt text only when response.ok. Lines matching /^[ \\t]*content-signal[ \\t]*:[ \\t]*(.+)$/gim anywhere in the file (independent of User-agent groups). Later lines override earlier keys (Object.assign)."
+        "condition": "Content-Signal directives from lib/robots.mjs parseRobots (anywhere in the file, independent of User-agent groups; '#' comments stripped). Later lines override earlier keys."
       },
       {
         "step": "value parsing",
@@ -31,40 +25,38 @@
       },
       {
         "step": "header",
-        "condition": "content-signal header (case-insensitive) from the plain page response; if absent, from the Accept: text/markdown response. Parsed with the same value parser."
+        "condition": "content-signal from site.host.headersFor('/') (first rule with a valid pair). Parsed with the same value parser."
       },
       {
         "step": "combine",
-        "condition": "combined = {...headerSignals, ...robotsSignals} (robots wins on conflicts). source = both | robots | header when the respective parsed object is non-empty."
+        "condition": "combined = {...headerSignals, ...robotsSignals} (robots wins on conflicts). source = both | robots | header."
       },
       {
         "condition": "at least one valid signal parsed from robots.txt or header",
-        "status": "pass",
-        "points": 3
+        "points": 3,
+        "note": "predicted: true when the only source is host header config"
       },
       {
-        "condition": "no valid signals, and robots.txt has a line matching /^[ \\t]*user-agent[ \\t]*:[ \\t]*<bot>[ \\t]*$/im (case-insensitive, exact bot name) for any bot in the AI bot list",
-        "status": "warning",
+        "condition": "no valid signals, no robots.txt file, and Generated robots.txt (no file in the served root, but src/pages/robots.txt.*, app/robots.*, robots.njk/robots.11ty.js, Hugo enableRobotsTXT, astro-robots-txt / next-sitemap, or a CMS in report-only mode)",
+        "points": 2,
+        "inconclusive": true
+      },
+      {
+        "condition": "no valid signals, and a robots.txt User-agent token (lowercased, comments stripped) equals a name in references/ai-bots.json (case-insensitive)",
         "points": 1
       },
       {
-        "condition": "otherwise (including no robots.txt / robots 404, or robots unreachable but page reachable)",
-        "status": "fail",
-        "points": 0
-      },
-      {
-        "condition": "exception thrown",
-        "status": "fail",
+        "condition": "otherwise (including no robots.txt)",
         "points": 0
       }
     ],
-    "status_mapping": "Explicit per branch: pass=3, warning=1 (AI bots addressed, no signals), warning=2 (all three requests unreachable), fail=0.",
-    "inconclusive": "Only when all three requests (robots.txt, page GET, Markdown GET) are unreachable: warning, score 2 of 3, details.inconclusive true. If robots.txt alone is unreachable but the page responded without a header, the check proceeds and can fail with 0."
+    "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning.",
+    "inconclusive": "Only when robots.txt is generated and not in the served root and no header signal is configured: 2/3, inconclusive true (the extension's value for its all-unreachable branch)."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/ai-access/content-signals.mjs",
-    "source_procedure": "1) Find robots.txt: static root/robots.txt; Astro public/robots.txt or src/pages/robots.txt.ts; Hugo static/robots.txt or layouts/robots.txt with enableRobotsTXT in hugo.toml/config.toml; Eleventy passthrough robots.txt or robots.njk with permalink; Next.js public/robots.txt or app/robots.ts (MetadataRoute.Robots has no Content-Signal field, so check for a static file or a route handler); Vite public/robots.txt. Also check framework plugins (e.g. astro-robots-txt config). 2) Apply the exact content-signal regex and value parser to the (rendered, if generated) robots.txt text. 3) Look for a Content-Signal header in host config: _headers (Cloudflare Pages/Netlify), netlify.toml [[headers]], vercel.json headers, Next.js next.config.* headers(), middleware.ts, server code. Parse with the same parser. 4) If none, test robots.txt for User-agent lines whose value exactly equals (case-insensitive) a key in the ai-robots-txt robots.json list. 5) Score.",
+    "source_procedure": "1) Read robots.txt from the served root and extract Content-Signal lines with lib/robots.mjs. 2) Read a Content-Signal header for '/' from _headers, vercel.json headers or netlify.toml [[headers]] (site.host.headersFor). 3) Any valid pair -> 3. 4) Else a generated robots.txt -> 2 inconclusive. 5) Else User-agent lines naming an AI bot -> 1. 6) Else 0.",
     "llm_criteria": "Only for generated robots.txt or header code paths (template logic, env-dependent output): decide what literal robots.txt text and response headers production would emit, then apply the rules mechanically."
   },
   "parity": {
@@ -86,5 +78,22 @@
     "content.signals.header",
     "content.signals.ai_bots_addressed"
   ],
-  "extension_source": "src/shared/checks/content-signals-checker.js"
+  "extension_source": "src/shared/checks/content-signals-checker.js",
+  "divergences": [
+    {
+      "extension": "Signals come from live robots.txt, the page response header and the Accept: text/markdown response header; all three unreachable -> 2 inconclusive.",
+      "plugin": "robots.txt from the served root and the header from host config for '/'; the Markdown response header (set by CDNs such as Cloudflare) cannot be seen. A generated robots.txt is the inconclusive (2) case; a header-only pass is marked predicted.",
+      "reason": "Source vs live."
+    },
+    {
+      "extension": "A Content-Signal value with a trailing '# comment' is invalid, and 'User-agent: GPTBot # note' does not count as addressing the bot.",
+      "plugin": "Comments are stripped before parsing (lib/robots.mjs).",
+      "reason": "robots.txt comment syntax; the extension missed valid declarations."
+    },
+    {
+      "extension": "If robots.txt alone is unreachable but the page responded without a header, the check fails with 0.",
+      "plugin": "No equivalent: a robots.txt that exists in the repo is always read; only a generated one is inconclusive.",
+      "reason": "Unreachable-vs-absent rule."
+    }
+  ]
 }

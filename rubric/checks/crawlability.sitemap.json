@@ -12,50 +12,48 @@
     "current page URL"
   ],
   "scoring": {
-    "summary": "Probe the four locations in order; if none returns HTTP 2xx: fail, 0. Otherwise start at 5: -1 if robots.txt text is unavailable (404 or unreachable), -2 if robots.txt does not contain the substring \"sitemap:\" (case-insensitive, also applied when robots.txt is missing, so missing robots.txt costs 3), -2 if the sitemap body contains zero \"<loc>\" substrings. Clamp at 0. Possible scores: 5 (all good), 3 (not referenced, or empty), 2 (no robots.txt), 1 (not referenced and empty), 0 (no robots.txt and empty, or no sitemap).",
+    "summary": "Look for sitemap.xml, sitemap_index.xml, sitemap-index.xml, sitemap1.xml in the served root (in that order), then any sitemap declared by a robots.txt Sitemap: line that exists on disk. Else a sitemap generator in config (Astro @astrojs/sitemap with site, Hugo default, Next app/sitemap.*, next-sitemap, Eleventy sitemap templates, vite-plugin-sitemap, WordPress core) counts as found (predicted, URL count assumed > 0). None -> 0. Otherwise start at 5: -1 if robots.txt is absent, -2 if robots.txt has no Sitemap: directive (so an absent robots.txt costs 3), -2 if the sitemap has zero <loc> entries. A generated robots.txt is not penalized (inconclusive). Clamp at 0.",
     "rules": [
       {
         "id": "sitemap.exists",
-        "condition": "none of /sitemap.xml, /sitemap_index.xml, /sitemap-index.xml, /sitemap1.xml returns response.ok (2xx after following redirects)",
-        "status": "fail",
+        "condition": "no sitemap file at the four probed names, none declared in robots.txt on disk, and no generator",
         "points": 0
       },
       {
+        "id": "sitemap.generated",
+        "condition": "no file but a generator is configured",
+        "points": "found (predicted: true), <loc> count not checked"
+      },
+      {
         "id": "sitemap.robots_present",
-        "condition": "getRobotsTxt() returns null (robots.txt non-2xx, including 404 and unreachable)",
+        "condition": "no robots.txt in the served root and no robots.txt generator",
         "points": "-1"
       },
       {
         "id": "sitemap.robots_reference",
-        "condition": "robots.txt missing OR lowercase robots.txt does not include \"sitemap:\"",
+        "condition": "robots.txt absent, or parseRobots(robots).sitemaps is empty (a real 'Sitemap:' directive; commented lines do not count)",
         "points": "-2",
-        "note": "Any Sitemap: line counts, even if it points to a different URL than the one found."
+        "note": "skipped (inconclusive) when robots.txt is generated"
       },
       {
         "id": "sitemap.has_urls",
-        "condition": "count of literal \"<loc>\" substrings in sitemap body == 0",
+        "condition": "count of /<loc[\\s>]/ in the sitemap body == 0",
         "points": "-2"
       },
       {
-        "id": "sitemap.contains_current_page",
-        "condition": "sitemap body does not include the exact current URL string and body lacks \"<sitemapindex\"",
-        "points": 0,
-        "note": "informational only, no penalty"
-      },
-      {
         "id": "sitemap.is_index",
-        "condition": "body includes \"<sitemapindex\"",
+        "condition": "body matches /<sitemapindex[\\s>]/i",
         "points": 0,
-        "note": "informational; child sitemaps are not fetched, <loc> count includes index entries"
+        "note": "informational; child sitemaps are not read"
       }
     ],
-    "status_mapping": "score >= 5 -> pass; score >= 2 -> warning; else fail.",
-    "inconclusive": "Not implemented. Sitemap probes do not use isUnreachable: a 403/429/503/timeout on every location is scored as \"No sitemap.xml found\" (fail 0), and an unreachable robots.txt is penalized the same as a 404 (-3). This contradicts the project rule in CLAUDE.md."
+    "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning. Scores: 5 pass, 3 warning, 2 or less fail.",
+    "inconclusive": "When robots.txt is generated (not in the served root): the robots presence and reference penalties are skipped and inconclusive is true."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/crawlability/sitemap.mjs",
-    "source_procedure": "Static: look for a sitemap file served at the root: public/sitemap.xml, static/sitemap.xml, root sitemap.xml (static HTML), sitemap_index.xml, sitemap-index.xml, sitemap1.xml. Generated sitemaps: Astro @astrojs/sitemap in astro.config.* integrations (emits sitemap-index.xml and sitemap-0.xml; requires site set, else it emits nothing); Hugo generates sitemap.xml by default unless disableKinds contains \"sitemap\" (check hugo.toml/config.toml); Eleventy: a sitemap.njk/sitemap.xml.* template with permalink /sitemap.xml or @quasibit/eleventy-plugin-sitemap; Next.js app router: app/sitemap.ts|js|xml (serves /sitemap.xml), pages router: next-sitemap config/postbuild or pages/sitemap.xml.*; Vite SPA: public/sitemap.xml or a vite sitemap plugin (vite-plugin-sitemap). Also check host redirects/rewrites (_redirects, vercel.json, netlify.toml) that map one of the four paths. If the sitemap is generated with a non-probed name only (e.g. only /sitemap-0.xml), it is NOT found by the extension. Empty check: static file has at least one <loc>; generators with at least one page count as non-empty. robots.txt: public/robots.txt, static/robots.txt, root robots.txt, Next.js app/robots.ts (sitemap field), astro-robots-txt integration, Hugo enableRobotsTXT + layouts/robots.txt; check presence and a case-insensitive \"Sitemap:\" line.",
+    "source_procedure": "1) Probe the served root for sitemap.xml, sitemap_index.xml, sitemap-index.xml, sitemap1.xml, then robots.txt Sitemap: paths that exist on disk. 2) If none, detect a generator (lib/sources.mjs sitemapGenerator) -> predicted found. 3) If still none -> 0. 4) robots.txt absent -1; no Sitemap: directive -2 (skipped if robots.txt is generated). 5) Zero <loc> entries -2.",
     "llm_criteria": "Model judges whether a generator config will actually emit a file at one of the four probed paths (e.g. Astro sitemap without site config, conditional Next.js sitemap routes, Hugo disableKinds) and whether the generated sitemap would contain at least one URL."
   },
   "parity": {
@@ -80,5 +78,37 @@
     "sitemap.contains_current_page",
     "sitemap.is_index"
   ],
-  "extension_source": "src/shared/checks/sitemap-checker.js"
+  "extension_source": "src/shared/checks/sitemap-checker.js",
+  "divergences": [
+    {
+      "extension": "Only the four fixed paths are probed; a sitemap declared in robots.txt at another path is 'not found' (fail 0).",
+      "plugin": "A sitemap declared by a robots.txt Sitemap: line that exists in the served root also counts.",
+      "reason": "Sitemap: in robots.txt is the standard discovery mechanism; the extension produced a false negative."
+    },
+    {
+      "extension": "robots.txt reference is lowercase includes('sitemap:'), which matches '# Sitemap:' comments or any text.",
+      "plugin": "Only a real Sitemap: directive (lib/robots.mjs, comments stripped) counts.",
+      "reason": "False positive on commented-out lines."
+    },
+    {
+      "extension": "<loc> counted as the literal substring '<loc>'.",
+      "plugin": "Counts /<loc[\\s>]/ so '<loc >' also counts.",
+      "reason": "Whitespace variants are valid XML."
+    },
+    {
+      "extension": "Live probes: 403/429/503/timeout on every path is fail 0 and an unreachable robots.txt costs 3.",
+      "plugin": "Files are read from the served root; a sitemap generator without build output is predicted found; a generated robots.txt is not penalized (inconclusive).",
+      "reason": "Source vs live and the unreachable-vs-absent rule."
+    },
+    {
+      "extension": "Status: >= 5 pass, >= 2 warning, else fail.",
+      "plugin": "Status derived from the integer score by the shared 80% / 50% rule (2/5 is fail).",
+      "reason": "Shared status rule."
+    },
+    {
+      "extension": "Reports whether the current page URL appears in the sitemap (informational).",
+      "plugin": "Not reported (site check).",
+      "reason": "No current page in a site-level source audit; it never affected the score."
+    }
+  ]
 }

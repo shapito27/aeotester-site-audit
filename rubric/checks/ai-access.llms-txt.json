@@ -12,15 +12,23 @@
     "robots.txt (User-agent: * group only)"
   ],
   "scoring": {
-    "summary": "If /llms.txt is not response.ok -> fail 0. Otherwise start at 5 (baseScore): empty file -3, else < 50 chars -1; blocked for User-agent * by robots.txt -2; +1 if format valid (first non-empty line is '# Title' AND at least one markdown link). Clamp to 0..6. Status: >= 5 pass, >= 2 warning, else fail.",
+    "summary": "llms.txt absent from the served root -> 0. Generated llms.txt that cannot be read -> 3 (inconclusive). Otherwise start at 5: empty file -3, else < 50 characters -1; blocked for User-agent * by robots.txt (lib/robots.mjs longest match) -2; +1 if the format is valid (first non-empty line '# Title' AND at least one markdown link). Clamp 0..6. llms-full.txt is reported, not scored.",
     "rules": [
       {
-        "condition": "GET /llms.txt (timeout 2500 ms) not ok (any non-2xx, including 403/429/503/timeout/network error)",
-        "status": "fail",
+        "condition": "no llms.txt in the served root and no generator",
         "points": 0
       },
       {
-        "condition": "file length (JS string length of body) === 0",
+        "condition": "no llms.txt file but a generator exists (src/pages/llms.txt.*, app/llms.txt/route.*, layouts/index.llms.txt, llms.txt templates, a package with 'llms' in its name, or a CMS in report-only mode)",
+        "points": 3,
+        "inconclusive": true
+      },
+      {
+        "condition": "start",
+        "points": 5
+      },
+      {
+        "condition": "file length (JS string length) === 0",
         "points": "-3"
       },
       {
@@ -28,17 +36,17 @@
         "points": "-1"
       },
       {
-        "condition": "robots.txt exists and path '/llms.txt' not allowed by the User-agent: * group (RobotsParser.isPathAllowed on rules.global: any matching Allow wins first, then any matching Disallow blocks; patterns support * and $, '?' treated as single-char wildcard)",
+        "condition": "robots.txt in the served root blocks '/llms.txt' for User-agent: * (canCrawl(parsed, '*', '/llms.txt'): longest match wins, Allow wins ties, comments stripped)",
         "points": "-2"
       },
       {
         "condition": "file length > 10000",
         "points": "0",
-        "note": "issue text only, no penalty"
+        "note": "finding only, no penalty"
       },
       {
         "step": "format validation",
-        "condition": "hasH1 = first non-empty line (trimmed) matches /^#\\s+\\S/ ; linkCount = matches of /\\[[^\\]]+\\]\\([^)]+\\)/g ; valid = hasH1 AND linkCount > 0. hasSummary (/^>\\s+\\S/m) and sectionCount (/^##\\s+/gm) are informational."
+        "condition": "hasH1 = first non-empty line (trimmed) matches /^#\\s+\\S/ ; linkCount = matches of /\\[[^\\]]+\\]\\([^)]+\\)/g ; valid = hasH1 AND linkCount > 0. hasSummary and sectionCount are informational."
       },
       {
         "condition": "format valid",
@@ -47,30 +55,25 @@
       {
         "condition": "format invalid and file non-empty",
         "points": "0",
-        "note": "format issues added to message only"
+        "note": "one finding per format issue"
       },
       {
         "step": "clamp",
-        "condition": "finalScore = max(0, min(6, score))"
+        "condition": "score = max(0, min(6, score))"
       },
       {
-        "condition": "/llms-full.txt response.ok",
+        "condition": "llms-full.txt present in the served root",
         "points": "0",
-        "note": "informational; recommendation suggests adding it when absent"
-      },
-      {
-        "condition": "exception thrown (e.g. body undefined)",
-        "status": "fail",
-        "points": 0
+        "note": "details.llmsFullTxt; recommendation suggests adding it when absent"
       }
     ],
-    "status_mapping": "finalScore >= 5 pass, >= 2 warning, else fail. Typical: valid file 6 pass; exists but no H1/links 5 pass; short (< 50) valid 5 pass; blocked by robots 3 or 4 warning; empty file 2 warning; not found 0 fail.",
-    "inconclusive": null
+    "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning. Typical: valid 6 pass; no H1/links 5 pass; blocked 3-4 warning; empty 2 fail; absent 0 fail.",
+    "inconclusive": "Only when llms.txt is generated and not present in the served root: 3/6 with inconclusive true."
   },
   "detect": {
     "method": "script",
     "script": "checks/ai-access/llms-txt.mjs",
-    "source_procedure": "1) Look for llms.txt served at the site root: static root/llms.txt; Astro public/llms.txt or src/pages/llms.txt.ts (endpoint) or an llms.txt integration in astro.config.*; Hugo static/llms.txt or an output format/template (layouts/index.llms.txt, outputFormats in hugo.toml); Eleventy passthrough-copied llms.txt or llms.txt.njk/.liquid with permalink /llms.txt; Next.js public/llms.txt or app/llms.txt/route.ts; Vite public/llms.txt. 2) Not found -> 0 fail. 3) Read (or render) the file: length 0 -> -3, length < 50 -> -1. 4) Parse robots.txt (see source locations for robots.txt) using the User-agent: * group only and test '/llms.txt' with Allow-first then Disallow prefix/wildcard matching -> -2 if blocked. 5) Validate format: first non-empty line '# X' and at least one [text](url) link -> +1. 6) Clamp 0..6, map status. 7) Also report whether llms-full.txt exists (no score)."
+    "source_procedure": "1) Read llms.txt from the served root. 2) If absent: generator present -> 3 inconclusive, else 0. 3) Length 0 -> -3, < 50 -> -1. 4) If robots.txt exists, test '/llms.txt' for User-agent * with lib/robots.mjs -> -2 if blocked (a generated robots.txt is not penalized). 5) First non-empty line '# X' and at least one [text](url) link -> +1. 6) Clamp 0..6. 7) Report whether llms-full.txt exists (no score)."
   },
   "parity": {
     "level": "partial",
@@ -94,5 +97,22 @@
     "llms.txt.format.links",
     "llms.full.present"
   ],
-  "extension_source": "src/shared/checks/llms-txt-checker.js"
+  "extension_source": "src/shared/checks/llms-txt-checker.js",
+  "divergences": [
+    {
+      "extension": "robots.txt block test uses Allow-first precedence, '?' as a wildcard, and last-User-agent-only grouping.",
+      "plugin": "lib/robots.mjs: longest match wins, Allow wins ties, '?' is literal, grouped User-agent lines share rules, comments stripped.",
+      "reason": "RFC 9309 (same parser fixes as ai-access.bot-crawlability)."
+    },
+    {
+      "extension": "Status: >= 5 pass, >= 2 warning, else fail (an empty file scores 2 warning).",
+      "plugin": "Status derived from the integer score by the shared 80% / 50% rule (2/6 is fail, 3/6 warning).",
+      "reason": "Status and score must agree."
+    },
+    {
+      "extension": "Fetches /llms.txt live; any non-2xx (including 403/429/503/timeout) is fail 0; an HTML soft-200 page counts as found.",
+      "plugin": "Reads llms.txt from the served root; absence is informative (0); a generated llms.txt is inconclusive at 3.",
+      "reason": "Source vs live, and the unreachable-vs-absent rule."
+    }
+  ]
 }

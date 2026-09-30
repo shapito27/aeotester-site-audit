@@ -11,38 +11,48 @@
     "rendered DOM: img[src], script[src], link[rel=\"stylesheet\"][href], iframe[src]"
   ],
   "scoring": {
-    "summary": "If the URL protocol is not https: fail, 0. Otherwise start at 2 and subtract 0.5 if any mixed content is found; reported score is Math.floor, so HTTPS with mixed content gives 1, clean HTTPS gives 2.",
+    "summary": "Site check. The scheme is inferred (predicted), since the repo cannot show TLS: host config forcing HTTPS (Strict-Transport-Security header rule, or an http:// -> https:// redirect rule) -> https; else the declared site URL (base URL, else canonical / og:url on pages; localhost ignored) -> http or https, except that an http declaration on a host that serves HTTPS by default (Netlify, Vercel, Cloudflare, GitHub Pages, Firebase) is https; else a known HTTPS host -> https; else unknown. http -> 0. https -> 2, or 1 if any page has mixed content. Unknown -> 1 inconclusive.",
     "rules": [
       {
         "id": "security.https",
-        "condition": "new URL(url).protocol !== \"https:\" (falls back to window.location.protocol if URL parse throws)",
-        "status": "fail",
-        "points": 0
+        "condition": "inferred scheme is http (declared http:// site URL, nothing forcing HTTPS, host unknown)",
+        "points": 0,
+        "predicted": true
+      },
+      {
+        "id": "security.https.unknown",
+        "condition": "no site URL, no canonical/og:url, no HSTS/redirect rule, unknown host",
+        "points": 1,
+        "inconclusive": true
       },
       {
         "id": "security.mixed_content",
-        "condition": "any element matches img[src^=\"http:\"], script[src^=\"http:\"], link[rel=\"stylesheet\"][href^=\"http:\"], iframe[src^=\"http:\"] (attribute value prefix, case-sensitive, exact rel value \"stylesheet\")",
-        "status": "warning",
+        "condition": "any page matches img[src^=\"http:\"], script[src^=\"http:\"], link[rel=\"stylesheet\"][href^=\"http:\"], iframe[src^=\"http:\"] (case-sensitive prefix, exact rel)",
         "points": "-0.5 -> floor(1.5) = 1"
       },
       {
-        "condition": "HTTPS and no mixed content",
-        "status": "pass",
-        "points": 2
+        "condition": "https inferred and no mixed content",
+        "points": 2,
+        "predicted": true
+      },
+      {
+        "condition": "canonical or og:url declares http://",
+        "points": 0,
+        "note": "finding only when the scheme is https by other evidence"
       }
     ],
-    "status_mapping": "not HTTPS -> fail; HTTPS with any mixed content -> warning; else pass.",
-    "inconclusive": null
+    "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning.",
+    "inconclusive": "When nothing in the repo indicates the production scheme: 1/2 with inconclusive true. Every other result is predicted."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/crawlability/https.mjs",
-    "source_procedure": "HTTPS: determine the production URL from config: astro.config.* site, hugo.toml/config.toml baseURL, Eleventy site data (_data/site.json url), Next.js metadataBase / NEXT_PUBLIC_SITE_URL / next-sitemap siteUrl, package.json homepage, CNAME file (GitHub Pages), canonical/og:url values in templates, vercel.json/netlify.toml/_headers/_redirects (HTTPS redirects, HSTS). If the canonical site URL starts with https:// treat as pass-candidate; http:// -> fail; unknown -> report as live-only for this sub-criterion (Vercel, Netlify, Cloudflare Pages and GitHub Pages serve HTTPS by default). Mixed content: grep templates, components and content (*.html, *.astro, *.tsx, *.jsx, *.vue, *.njk, *.liquid, Hugo layouts, markdown) for src=\"http: on img/script/iframe and href=\"http: on link rel=\"stylesheet\" (also JSX src={\"http:...\"} and markdown images ![](http://...), which render to img). Score: not HTTPS 0; HTTPS with any mixed content 1; else 2.",
+    "source_procedure": "1) HTTPS evidence: Strict-Transport-Security in host header config for '/', http:// -> https:// rules in _redirects / netlify.toml / vercel.json / firebase.json (forced https). 2) Declared site URL: site.baseUrl (CLI --base-url, home canonical/og:url, sitemap <loc>, CNAME, Hugo baseURL, Astro site), and canonical/og:url on every page (http:// ones become findings). 3) Host defaults from config files (netlify.toml, vercel.json, wrangler.*, firebase.json, CNAME, _headers/_redirects). 4) Mixed content: the four extension selectors over every loaded page, one finding per element. 5) Score: http 0; https 2 (1 with mixed content); unknown 1 inconclusive.",
     "llm_criteria": "Model decides the production scheme when config is ambiguous (e.g. no site URL, custom domain on a known host) and whether an http: asset reference is actually rendered on the page (not in comments, docs code blocks or dead components)."
   },
   "parity": {
     "level": "partial",
-    "note": "The protocol is a property of the deployment, not the repo; source can only infer it from config and host conventions. Mixed content from literal templates matches, but scripts/widgets injected at runtime, CMS content, and http: URLs built dynamically are not visible. Protocol-relative (//) or uppercase (HTTP:) URLs are not flagged by the extension either, so do not flag them."
+    "note": "The protocol is a property of the deployment, not the repo; the plugin infers it from host config, declared URLs and host defaults and marks the result predicted. Mixed content from built HTML matches the extension, but scripts injected at runtime and CMS content are not visible. Protocol-relative (//) and uppercase (HTTP:) URLs are not flagged, as in the extension."
   },
   "fixable": "assisted",
   "fix_recipe": "fix-recipes/crawlability.https.md",
@@ -58,5 +68,17 @@
     "security.https",
     "security.mixed_content"
   ],
-  "extension_source": "src/shared/checks/security-checker.js"
+  "extension_source": "src/shared/checks/security-checker.js",
+  "divergences": [
+    {
+      "extension": "Uses the protocol of the live page URL.",
+      "plugin": "Infers the scheme from HSTS / http->https redirect rules, the declared site URL (base URL, canonical, og:url) and host defaults; unknown is 1/2 inconclusive.",
+      "reason": "Source vs live: TLS is not visible in the repo."
+    },
+    {
+      "extension": "Mixed content is checked on the current page only.",
+      "plugin": "Site check over every loaded page; any mixed content on any page costs the 0.5 point, one finding per element.",
+      "reason": "Site-level audit of all pages; findings group by message across pages."
+    }
+  ]
 }

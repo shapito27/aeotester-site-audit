@@ -12,58 +12,41 @@
     "HTTP response header X-Robots-Tag of the current page"
   ],
   "scoring": {
-    "summary": "Three independent criteria, 1 point each. Probe: +1 if the final status is 404 or 410, or if the probe was inconclusive (status 0, 403, 429, 503, timeout, or any status >= 500); 0 if 200 (soft 404) or any other status (e.g. 401, 400). Page: +1 if the final status is 200 or the fetch was unreachable (0, 403, 429, 503, timeout); 0 otherwise (e.g. 404, 500, 502, 401). Header: +1 unless X-Robots-Tag matches /\\b(noindex|none)\\b/i. A noindex header forces status fail regardless of score.",
+    "summary": "Site check, all predicted from the repo. Three criteria, 1 point each, summed and floored. Unknown URL: 1 if a catch-all rule serves a 404/410, or a 404 page exists (served-root 404.html or framework 404 source) or the stack/host returns 404 by default (Next.js, Netlify, Vercel, GitHub Pages, Firebase) and no catch-all rewrite (200) or redirect-to-a-page rule covers unknown paths; 0 when such a catch-all exists (soft 404); 0.5 inconclusive when there is no 404 page and the host is unknown or Cloudflare Pages. Page status: fraction of pages not hit by a Basic-Auth header rule, an error-status rule, or a forced redirect to a path with no file. X-Robots-Tag: fraction of pages whose header rules (_headers, vercel.json, netlify.toml, .htaccess) have no value matching /\\b(noindex|none)\\b/i.",
     "rules": [
       {
-        "condition": "probe final status is 404 or 410",
+        "condition": "catch-all rule (/*, **, /(.*), /:path*) in _redirects, netlify.toml, vercel.json rewrites/redirects/routes or firebase.json with status 404/410",
         "points": "+1"
       },
       {
-        "condition": "probe inconclusive: status 0 (network/timeout), 403, 429, 503, timedOut, or status >= 500",
-        "points": "+1",
-        "note": "Benefit of the doubt"
-      },
-      {
-        "condition": "probe final status 200 (including a redirect of unknown URLs to the homepage or any 200 page)",
+        "condition": "catch-all rule rewriting (200) or redirecting (3xx) every unknown URL to a fixed page; path-preserving targets (:splat, $1, :path) ignored",
         "points": "0",
-        "message": "Unknown URLs return HTTP 200 (soft 404), so agents cannot tell a missing page from a real one"
+        "message": "Unknown URLs return HTTP 200 (soft 404)"
       },
       {
-        "condition": "probe any other status (e.g. 400, 401, 405, 451)",
-        "points": "0",
-        "message": "Unknown URLs return HTTP <status> instead of 404"
-      },
-      {
-        "condition": "page final status 200",
+        "condition": "no catch-all; 404.html in the served root, or a framework 404 source (src/pages/404.astro, layouts/404.html, app/not-found.*, pages/404.*, public/404.html, static/404.html, 404.md/njk/liquid)",
         "points": "+1"
       },
       {
-        "condition": "page unreachable: status 0, 403, 429, 503, or timedOut",
-        "points": "+1",
-        "note": "Adds an informational issue 'likely bot protection' when status is not 200"
-      },
-      {
-        "condition": "page any other status (e.g. 404, 410, 500, 502, 401)",
-        "points": "0",
-        "message": "This page returns HTTP <status> to a plain fetch"
-      },
-      {
-        "condition": "page X-Robots-Tag header (case-insensitive name) present and matches /\\b(noindex|none)\\b/i",
-        "points": "0",
-        "status": "fail (forced)"
-      },
-      {
-        "condition": "X-Robots-Tag absent or without noindex/none",
+        "condition": "no 404 page, stack is Next.js or host is Netlify / Vercel / GitHub Pages / Firebase (default 404 page with status 404)",
         "points": "+1"
       },
       {
-        "condition": "exception thrown anywhere (e.g. invalid URL)",
-        "status": "fail",
-        "points": 0
+        "condition": "no 404 page, host unknown or Cloudflare Pages (SPA fallback with 200 when no 404.html)",
+        "points": "+0.5",
+        "inconclusive": true
+      },
+      {
+        "condition": "page status, per page (or '/' without built pages): Basic-Auth header rule -> 401; rule with status >= 400 matching the path -> that status; forced 3xx redirect (_redirects '!', netlify.toml force, vercel/firebase redirects) to a local path with no file -> 404; unforced _redirects/netlify.toml rules are shadowed by the existing file; 200 rewrites ignored",
+        "points": "+(pages OK / pages)"
+      },
+      {
+        "condition": "X-Robots-Tag, per page: any host header rule or .htaccess 'Header set X-Robots-Tag' value matches /\\b(noindex|none)\\b/i",
+        "points": "+(pages not blocked / pages)"
       }
     ],
-    "status_mapping": "If X-Robots-Tag blocks: fail (score can still be 2). Else score 3 pass, 2 warning, 0-1 fail.",
-    "inconclusive": "isUnreachable (status 0, 403, 429, 503 or timeout) on the probe or page still awards that criterion's point; the probe additionally treats any 5xx as inconclusive. No details.inconclusive flag is set and there is no half-weight warning; an unreachable site can score 3/3 pass."
+    "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning.",
+    "inconclusive": "Only the unknown-URL criterion: no 404 page and an unknown (or Cloudflare Pages) host gives 0.5 of its point and inconclusive true. The whole result is always predicted: true."
   },
   "detect": {
     "method": "hybrid",
@@ -90,5 +73,27 @@
     "http.page.status_200",
     "http.x_robots_tag.not_noindex"
   ],
-  "extension_source": "src/shared/checks/http-behavior-checker.js"
+  "extension_source": "src/shared/checks/http-behavior-checker.js",
+  "divergences": [
+    {
+      "extension": "Probes a random URL, fetches the page and reads its X-Robots-Tag header live.",
+      "plugin": "Predicts all three from host config (redirect/rewrite rules, header rules, .htaccess), 404 pages and host defaults; result is predicted.",
+      "reason": "Source vs live."
+    },
+    {
+      "extension": "Unreachable probe or page (0/403/429/503/timeout, any 5xx for the probe) earns the full point with no inconclusive flag.",
+      "plugin": "The only unknown case (no 404 page, host unknown) earns half the point with inconclusive true.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md (warning at roughly half weight)."
+    },
+    {
+      "extension": "Page status and X-Robots-Tag are judged for the current page only.",
+      "plugin": "Judged for every loaded page; each criterion earns the fraction of pages that pass.",
+      "reason": "Site check over all pages; a rule covering one path is visible in source."
+    },
+    {
+      "extension": "An X-Robots-Tag noindex/none header forces status fail regardless of score.",
+      "plugin": "The header point is lost; status is derived from the integer score by the shared rule (so 2/3 is a warning).",
+      "reason": "Status and score must agree (engine-derived status)."
+    }
+  ]
 }
