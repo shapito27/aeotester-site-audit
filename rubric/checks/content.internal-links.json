@@ -1,0 +1,77 @@
+{
+  "id": "content.internal-links",
+  "extension_key": "internalLinking",
+  "name": "Internal Linking",
+  "category": "content",
+  "weight": 4,
+  "conditional": false,
+  "description": "Counts same-host links on the page, separating navigation (nav/header/footer) from in-content links, and penalises generic anchor text such as 'click here' in content. Internal links with descriptive anchors help AI crawlers understand site topology and what each linked page is about.",
+  "inputs": [
+    "rendered DOM: all a[href] elements, their href attribute, innerText and ancestor nav/header/footer/[role=navigation]",
+    "window.location.hostname"
+  ],
+  "scoring": {
+    "summary": "Start at 4. Internal = a[href] whose href is not mailto:/tel:/javascript:/# and whose resolved hostname equals the page hostname exactly. 0 internal links -> -3. Else if content links < 3 AND total internal < 5 -> -1. Generic anchor text on content (non-nav) links -> -0.25 each, max -1. finalScore = max(0, round to 1 decimal); status from unfloored value (>= 3 pass, >= 2 warning, else fail); reported score = floor.",
+    "rules": [
+      {
+        "step": "internal link",
+        "condition": "href attribute (raw) not starting with 'mailto:', 'tel:', 'javascript:' or '#', and new URL(href, window.location.origin).hostname === window.location.hostname (exact, so www vs apex differ; subdomains are external)"
+      },
+      {
+        "step": "nav vs content",
+        "condition": "link.closest('nav, header, footer, [role=\"navigation\"]') -> nav link; otherwise content link"
+      },
+      {
+        "step": "generic anchor",
+        "condition": "text = innerText trimmed lowercased; generic if length < 2 (includes empty, e.g. image-only links) or matches exactly one of: 'click here', 'here', 'read more', 'more', 'link', 'learn more', 'this', 'this link', 'click', 'go', 'see more', 'view', 'details', 'info', '→', '»', '>'"
+      },
+      {
+        "condition": "total internal links === 0",
+        "points": "-3"
+      },
+      {
+        "condition": "else content links < 3 AND total internal links < 5",
+        "points": "-1"
+      },
+      {
+        "condition": "generic content (non-nav) links count N > 0",
+        "points": "-min(N * 0.25, 1)"
+      },
+      {
+        "step": "informational",
+        "condition": "descriptivePercentage, uniqueDestinations (distinct pathnames), navToContentRatio: no score effect"
+      },
+      {
+        "step": "final",
+        "condition": "finalScore = max(0, round(score*10)/10); reported score = floor(finalScore)"
+      }
+    ],
+    "status_mapping": "Based on unfloored finalScore: >= 3 pass, >= 2 warning, else fail. Reported score = Math.floor(finalScore), e.g. 3.75 -> pass/3, 2.5 -> warning/2, 1 (no links) -> fail/1.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/content/internal-links.mjs",
+    "source_procedure": "Per representative page: 1) Assemble effective HTML: static *.html; Astro layout (src/layouts/*.astro) + page (src/pages/**) + components; Hugo layouts/_default/baseof.html + partials + content Markdown (Markdown links become <a>); Eleventy _includes/** layouts + page content; Next.js app/**/layout.tsx + page.tsx (<Link href> and <a href>), pages router _app/_document + page; Vite SPA components rendering the route. 2) Collect all anchors with href (<a href>, framework <Link href>/<NuxtLink to>, Markdown [text](url)). 3) Classify internal: relative URLs and absolute URLs whose host equals the production host (from site/baseURL in astro.config, hugo.toml baseURL, metadataBase, package homepage, CNAME file); exclude mailto:, tel:, javascript:, '#...'. 4) Mark nav links when inside <nav>, <header>, <footer> or role=navigation (including those in layout partials). 5) Compute visible anchor text (text content excluding alt text) and apply the generic list and length < 2 rule. 6) Apply deductions and thresholds."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension sees the rendered DOM including JS-injected links (menus, related posts widgets, CMS content) and uses innerText (hidden text excluded, CSS text-transform can apply). Link hrefs built from variables or data files need resolution. Exact hostname comparison depends on the live host (www vs apex, preview domains), so absolute links to the canonical domain can count as external when the audited URL uses a different host."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/content.internal-links.md",
+  "fix_summary": "Add at least 3 in-content internal links (outside nav/header/footer) to related pages with descriptive anchor text, and replace generic anchors ('read more', 'click here', icon-only links) with descriptive text or visually hidden text in the link. The plugin can rewrite generic anchors using the target page title automatically, but choosing which pages to link needs user or model judgment.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "links.internal.present",
+    "links.internal.content_count",
+    "links.internal.generic_anchor"
+  ],
+  "extension_source": "src/shared/checks/internal-linking-checker.js"
+}

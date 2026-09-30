@@ -1,0 +1,84 @@
+{
+  "id": "agent-readiness.markdown",
+  "extension_key": "markdownForAgents",
+  "name": "Markdown for Agents",
+  "category": "agent-readiness",
+  "weight": 5,
+  "conditional": false,
+  "description": "Checks whether the page offers a Markdown representation to AI agents: via HTTP content negotiation (Accept: text/markdown), an advertised alternate (<link rel=alternate type=text/markdown> or Link header), or an undiscoverable .md sibling file. Markdown gives agents the same content at a fraction of the tokens of HTML.",
+  "inputs": [
+    "HTTP GET of page with 'Accept: text/markdown, text/html;q=0.9' (status, Content-Type, Link, Vary, X-Markdown-Tokens headers)",
+    "rendered DOM <link rel~=alternate type=text/markdown|text/x-markdown>",
+    "HTTP GET of .md probe URL (1500 ms timeout)"
+  ],
+  "scoring": {
+    "summary": "Tiered, first match wins: (0) negotiated request unreachable => warning 3 inconclusive; (1) negotiated response ok AND Content-Type matches /text\\/markdown/i => pass 5; (2) Link header advertises markdown alternate OR DOM has a markdown alternate <link> => warning 3; (3) .md probe returns non-HTML markdown => warning 2; (4) otherwise fail 0. Vary: Accept and X-Markdown-Tokens are recorded but not scored.",
+    "rules": [
+      {
+        "condition": "probe URL: strip query and hash; path '' or '/' => '/index.md'; last path segment contains '.' => no probe (null); else pathname with trailing '/' removed + '.md'",
+        "points": "n/a"
+      },
+      {
+        "condition": "isUnreachable(negotiation): status in [0, 403, 429, 503] or timedOut (3000 ms page timeout)",
+        "status": "warning",
+        "points": 3,
+        "inconclusive": true
+      },
+      {
+        "condition": "negotiation.ok AND Content-Type header matches /text\\/markdown/i",
+        "status": "pass",
+        "points": 5
+      },
+      {
+        "condition": "Link response header matches /text\\/markdown/i AND /rel=\"?alternate\"?/i (tested independently on the whole header string) OR document.querySelector('link[rel~=\"alternate\"][type=\"text/markdown\"], link[rel~=\"alternate\"][type=\"text/x-markdown\"]') exists",
+        "status": "warning",
+        "points": 3
+      },
+      {
+        "condition": "probe response ok AND NOT HTML (Content-Type not /text\\/html|application\\/xhtml/i and body not /^\\s*<(!doctype|html)/i) AND (Content-Type matches /markdown/i OR body matches /^\\s*#\\s+\\S/)",
+        "status": "warning",
+        "points": 2
+      },
+      {
+        "condition": "none of the above",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "exception thrown anywhere",
+        "status": "fail",
+        "points": 0
+      }
+    ],
+    "status_mapping": "Fixed per tier: 5 pass, 3 warning, 2 warning, 0 fail.",
+    "inconclusive": "If the Accept: text/markdown request is unreachable (status 0/403/429/503 or timed out), returns warning with 3 points and details.inconclusive = true, regardless of DOM alternate or probe results."
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/agent-readiness/markdown.mjs",
+    "source_procedure": "Tier 1 (negotiation) is server behaviour: look for evidence in host/server config - Cloudflare 'Markdown for Agents' is a zone setting (not in repo); check functions/_middleware.(js|ts) (Cloudflare Pages), middleware.ts (Next.js/Vercel), netlify/edge-functions/**, vercel.json 'rewrites'/'has' on header accept, nginx/Caddy configs, or server code that branches on Accept: text/markdown and sets Content-Type: text/markdown. If found, assume pass (unverified). Tier 2: grep page templates/head for <link rel=\"alternate\" type=\"text/markdown\" (static HTML *.html; Astro src/layouts/*.astro; Hugo layouts/_default/baseof.html, layouts/partials/head*.html, or outputFormats markdown in hugo.toml with alternate output; Eleventy _includes/**; Next.js app router metadata.alternates.types['text/markdown'] in app/**/layout.tsx|page.tsx, pages router <Head> in _document/_app; Vite index.html), and for Link headers containing text/markdown and rel=alternate in _headers (Netlify/Cloudflare Pages), netlify.toml [[headers]], vercel.json headers. Tier 3: check whether a .md file will be served at <path>.md or /index.md (public/**/*.md, static/**/*.md, Hugo markdown output format, build output) that starts with '# Heading' or will get a markdown Content-Type.",
+    "llm_criteria": "Judge whether any server/edge code or host config found actually returns Content-Type text/markdown when the request Accept header contains text/markdown for the audited page (not just for a single API route). If unsure, do not award tier 1; fall back to tiers 2/3."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Content negotiation is a runtime server/CDN property (often a Cloudflare dashboard toggle) and usually invisible in the repo, so source can under-report tier 1. DOM alternate links injected by JavaScript are seen by the extension but not in static templates. The .md probe depends on the host serving .md files with a non-HTML content type and on SPA fallbacks not returning index.html. Unreachable/WAF cases (inconclusive 3) cannot be reproduced from source."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/agent-readiness.markdown.md",
+  "fix_summary": "Auto-add <link rel=\"alternate\" type=\"text/markdown\" href=\"/page.md\"> to the head template (or Next.js metadata.alternates.types) and a Link header via _headers / netlify.toml / vercel.json, plus generate .md copies of pages at build time; this reaches 3/5. Full 5/5 needs server or edge content negotiation (Cloudflare Markdown for Agents toggle, a Pages/_middleware or Next.js middleware that returns text/markdown for Accept: text/markdown), which the user must enable or approve.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "markdown.negotiation",
+    "markdown.alternate.link_tag",
+    "markdown.alternate.link_header",
+    "markdown.md_variant",
+    "markdown.vary_accept"
+  ],
+  "extension_source": "src/shared/checks/markdown-for-agents-checker.js"
+}

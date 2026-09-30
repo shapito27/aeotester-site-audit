@@ -1,0 +1,127 @@
+{
+  "id": "agent-readiness.server-rendered",
+  "extension_key": "serverRendered",
+  "name": "Server-Rendered Content",
+  "category": "agent-readiness",
+  "weight": 6,
+  "conditional": false,
+  "description": "Compares the raw HTML the server returns (no JavaScript) with the rendered DOM to see how much of the visible text, the H1 and the title exist before hydration. Most AI crawlers and agents do not execute JavaScript, so client-only content is invisible to them.",
+  "inputs": [
+    "raw HTML of the page via plain GET (status, content-type, body, redirected, truncated)",
+    "rendered DOM: document.body text, first <h1>, document.title"
+  ],
+  "scoring": {
+    "summary": "Fetch raw HTML. Unreachable or non-200 -> warning 3 (inconclusive). Non-HTML content-type -> pass 6. Otherwise parse raw HTML, count words in raw body and rendered body (removing script, style, noscript, template, svg). ratio = raw/dom capped at 1 (1 if dom < 30 words). Start 6: empty SPA root in raw HTML -> 0; else ratio < 0.25 -> 0; else ratio < 0.6 -> 3. Then -1 if rendered H1 is missing from raw HTML, -1 if rendered title missing from raw HTML, floor at 0. Status >= 5 pass, >= 3 warning, else fail; a fail on a redirected or truncated fetch is raised to warning 3.",
+    "rules": [
+      {
+        "condition": "isUnreachable(page): status 0, 403, 429, 503 or timedOut (fetch timeout 3000 ms)",
+        "status": "warning",
+        "points": 3,
+        "inconclusive": true
+      },
+      {
+        "condition": "page.status !== 200 (e.g. 404, 500, 401)",
+        "status": "warning",
+        "points": 3,
+        "inconclusive": true
+      },
+      {
+        "condition": "Content-Type present and does not match /text\\/html|application\\/xhtml/i",
+        "status": "pass",
+        "points": 6,
+        "note": "missing Content-Type is treated as HTML"
+      },
+      {
+        "step": "word counts",
+        "condition": "clone body, remove 'script, style, noscript, template, svg', textContent, trim, split /\\s+/. rawWordCount from DOMParser-parsed raw HTML body; domWordCount from live document.body."
+      },
+      {
+        "step": "ratio",
+        "condition": "ratio = 1 if domWordCount < 30, else min(1, rawWordCount / domWordCount)"
+      },
+      {
+        "step": "empty app root",
+        "condition": "first selector in order ['#root', '#app', '#__next', '#__nuxt', '#___gatsby', '#svelte', '#q-app', '[data-reactroot]'] whose FIRST matching element in raw HTML has textContent.trim() === ''"
+      },
+      {
+        "condition": "empty app root found",
+        "points": "score = 0"
+      },
+      {
+        "condition": "else ratio < 0.25",
+        "points": "score = 0"
+      },
+      {
+        "condition": "else ratio < 0.6",
+        "points": "score = 3"
+      },
+      {
+        "condition": "else (ratio >= 0.6)",
+        "points": "score = 6"
+      },
+      {
+        "condition": "rendered DOM has an <h1> with non-empty text AND raw HTML has no <h1> element at all",
+        "points": "-1"
+      },
+      {
+        "condition": "document.title non-empty AND raw HTML <title> empty or missing",
+        "points": "-1"
+      },
+      {
+        "step": "clamp",
+        "condition": "score = max(0, score)"
+      },
+      {
+        "condition": "score >= 5",
+        "status": "pass"
+      },
+      {
+        "condition": "score >= 3",
+        "status": "warning"
+      },
+      {
+        "condition": "score < 3",
+        "status": "fail"
+      },
+      {
+        "condition": "status fail AND (page.redirected OR page.truncated (body > 2 MB default cap))",
+        "status": "warning",
+        "points": 3
+      },
+      {
+        "condition": "exception thrown",
+        "status": "fail",
+        "points": 0
+      }
+    ],
+    "status_mapping": "score >= 5 pass, 3-4 warning, 0-2 fail; fail downgraded to warning with score 3 when the raw fetch was redirected or truncated; unreachable and non-200 are warning 3.",
+    "inconclusive": "Unreachable (0/403/429/503/timeout) or any non-200 status returns warning with score 3 of 6 and details.inconclusive true; never a fail."
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/agent-readiness/server-rendered.mjs",
+    "source_procedure": "1) Identify rendering mode per stack. Static HTML: raw == rendered unless scripts inject content; inspect body. Astro: default static/SSR output is server-rendered; flag components with client:only (render nothing server-side) and pages whose main content is in a client:only island. Hugo/Eleventy: static output, server-rendered unless a JS framework mounts into an empty div. Next.js: app router server components render HTML; flag pages that are 'use client' with data fetched in useEffect, dynamic(() => ..., { ssr: false }) around main content, or output: 'export' pages with empty shells; pages router: getServerSideProps/getStaticProps render HTML, pure client fetching does not. Vite SPA (React/Vue/Svelte without SSR): index.html has an empty <div id=\"root\"> or <div id=\"app\"> -> score 0. 2) Where a build is possible, build and inspect the output HTML (dist/, out/, public/ for Hugo, _site/ for Eleventy, .next/server/app/*.html) and compute rawWordCount from it. 3) Check the output HTML for the app-root selectors with empty text, for an <h1> element and non-empty <title>. 4) Estimate rendered word count from the source components/content; if raw >= 60% of it, full credit. 5) Apply penalties and thresholds exactly.",
+    "llm_criteria": "Decide whether the page's main text, H1 and <title> are emitted in server HTML or only after client JavaScript runs. Estimate the share of final visible words present in server HTML and bucket it: < 25% -> 0, 25-59% -> 3, >= 60% -> 6. Any SPA mount node from the selector list that is empty in server HTML is an automatic 0 (even if other content exists)."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension diffs a live fetch against the live DOM; from source, the rendered DOM must be estimated. Middleware, edge rendering, A/B scripts, CMS content, consent walls, bot-specific responses and host behavior (redirects, 404/401 pages, compression) are invisible to source analysis. Building the site gives near-exact raw HTML for static generators, but the rendered word count still needs estimation when client JS adds content."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/agent-readiness.server-rendered.md",
+  "fix_summary": "Serve meaningful HTML without JavaScript: use SSR/SSG or prerendering (Astro default output instead of client:only, Next.js server components or getStaticProps instead of useEffect fetching or ssr:false, vite-plugin-ssr/prerender or a static generator for Vite SPAs), and make sure <h1> and <title> are in the server HTML (Next metadata export, Astro/Hugo layouts). These are architectural changes the plugin can outline or partially apply but the user must approve.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "agent.ssr.text_ratio",
+    "agent.ssr.app_root_empty",
+    "agent.ssr.h1_in_raw",
+    "agent.ssr.title_in_raw"
+  ],
+  "extension_source": "src/shared/checks/server-rendered-checker.js"
+}

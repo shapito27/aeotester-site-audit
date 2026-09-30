@@ -1,0 +1,75 @@
+{
+  "id": "agent-readiness.controls",
+  "extension_key": "agentControls",
+  "name": "Agent-Usable Controls",
+  "category": "agent-readiness",
+  "weight": 4,
+  "conditional": false,
+  "description": "Checks that interactive controls are operable through the accessibility tree, which is how browsing agents act on a page: buttons have accessible names and are focusable, links have real hrefs, click handlers are not on bare divs/spans, and personal-data inputs declare autocomplete. An icon-only button or an href-less link is invisible as an action to an agent.",
+  "inputs": [
+    "rendered DOM: button, [role=\"button\"], input[type=submit|button|reset|image]",
+    "rendered DOM: all <a> elements and their href/aria/name/id/onclick attributes",
+    "rendered DOM: div/span/li/p/img/td elements with an inline onclick attribute",
+    "rendered DOM: all <input> elements with type, name, id, autocomplete",
+    "hidden / aria-hidden=\"true\" attributes on elements and ancestors"
+  ],
+  "scoring": {
+    "summary": "Four categories, 1 point each. Elements inside (or being) [hidden] or [aria-hidden=\"true\"] are ignored. For each category: if it has 0 elements it earns 1 point; otherwise it earns 1 point when Math.round((total - problems) / total * 100) >= 90. If all four categories are empty the check passes with 4 and a 'no interactive controls' message.",
+    "rules": [
+      {
+        "condition": "buttons: elements = 'button, [role=\"button\"], input[type=\"submit\"], input[type=\"button\"], input[type=\"reset\"], input[type=\"image\"]' not hidden. Problem (max one per element) if no accessible name, OR role=\"button\" on a non-native element (native = button, input, select, textarea, summary, a[href]) without a tabindex attribute",
+        "points": "+1 if pass rate >= 90% or no buttons"
+      },
+      {
+        "condition": "accessible name order: non-blank aria-label; text of elements referenced by aria-labelledby ids; trimmed textContent (includes visually hidden text); title; value attribute; alt attribute; descendant img[alt] with non-blank alt; descendant 'svg > title' text; input type submit/reset with nothing else still counts as named",
+        "points": "definition"
+      },
+      {
+        "condition": "links: all <a> except role=\"button\" and hidden ones. Problem if href is missing, blank, exactly '#', or starts with 'javascript:' (case-insensitive, trimmed), UNLESS the anchor has aria-haspopup or aria-expanded, OR it is a named anchor (has name or id, has no text content, and has no onclick)",
+        "points": "+1 if pass rate >= 90% or no links"
+      },
+      {
+        "condition": "fakeClickables: 'div[onclick], span[onclick], li[onclick], p[onclick], img[onclick], td[onclick]' that have no role attribute at all and are not hidden. Problem if no tabindex attribute",
+        "points": "+1 if pass rate >= 90% or none",
+        "note": "Only literal inline onclick attributes; listeners attached with addEventListener or framework handlers (React onClick, Vue @click, Svelte on:click, Alpine @click) are not visible and never count"
+      },
+      {
+        "condition": "autocomplete: <input> elements not hidden. Candidate if type (lowercased, default 'text') is not in ['hidden','password','search','checkbox','radio','submit','button','reset','file','image','range','color'] AND (type is 'email' or 'tel' OR `${name} ${id}` matches /(^|[-_ ])(f(irst)?name|l(ast)?name|fullname|surname|address|street|city|zip|postal|postcode|phone|tel|email|country|state|company|organization)/i). Problem if autocomplete attribute is missing, blank, or 'off'",
+        "points": "+1 if pass rate >= 90% or no candidates"
+      },
+      {
+        "condition": "all four categories have total 0",
+        "status": "pass",
+        "points": 4
+      }
+    ],
+    "status_mapping": "score 4 pass, 2-3 warning, 0-1 fail.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/agent-readiness/controls.mjs",
+    "source_procedure": "Prefer scanning built HTML output (dist/, _site/, public/ after hugo, out/ or .next prerendered HTML) with an HTML parser and applying the rules exactly. Without a build, scan markup sources: static *.html; Astro src/**/*.astro (template part after frontmatter); Hugo layouts/**/*.html and shortcodes; Eleventy _includes/** and src/** templates (njk, liquid, md with HTML); Next.js/React app/**, pages/**, components/**/*.tsx|jsx (map JSX: className ignored, aria-label/aria-labelledby/title/alt/tabIndex=tabindex/autoComplete=autocomplete, href; React onClick does NOT render an onclick attribute so do not count it as a fake clickable); Vite SPA index.html plus src/** components. For each file collect buttons, anchors, inline onclick elements, and inputs; skip elements inside hidden or aria-hidden=\"true\" wrappers; compute per-category pass rate per page (or per component when pages cannot be composed) and apply the >= 90% threshold. When labels come from expressions ({t('save')}, {{ .Title }}), treat as named if the expression yields text."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension sees the live DOM, including controls rendered by client JS, third-party widgets (chat bubbles, cookie banners, embeds) and CMS content, all of which are absent from source. Per-page percentages depend on how components compose into a page, so component-level source scans can differ from the per-URL result. CSS-hidden elements are counted by both (only hidden/aria-hidden are excluded)."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/agent-readiness.controls.md",
+  "fix_summary": "Add autocomplete tokens (email, tel, given-name, family-name, street-address, postal-code, country-name, organization) to personal-data inputs; give icon-only buttons aria-label or visually hidden text; replace href-less or '#'/javascript: anchors with <button> or real hrefs; replace div/span onclick with <button> or add role/tabindex. Autocomplete and tabindex are auto-fixable in templates; label wording and link targets need user confirmation.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "agent.controls.buttons.named_focusable",
+    "agent.controls.links.real_href",
+    "agent.controls.no_fake_clickables",
+    "agent.controls.inputs.autocomplete"
+  ],
+  "extension_source": "src/shared/checks/agent-controls-checker.js"
+}

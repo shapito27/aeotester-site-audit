@@ -1,0 +1,98 @@
+{
+  "id": "ai-access.llms-txt",
+  "extension_key": "llmsTxt",
+  "name": "llms.txt Detection",
+  "category": "ai-access",
+  "weight": 6,
+  "conditional": false,
+  "description": "Checks for an /llms.txt file at the site root (llmstxt.org proposal), that it is non-trivial, not blocked by robots.txt, and follows the spec shape (H1 title plus markdown links). llms.txt gives AI assistants and agents a curated, navigable index of the site's key content. /llms-full.txt is detected but not scored.",
+  "inputs": [
+    "GET <origin>/llms.txt (status, body)",
+    "GET <origin>/llms-full.txt (existence only, informational)",
+    "robots.txt (User-agent: * group only)"
+  ],
+  "scoring": {
+    "summary": "If /llms.txt is not response.ok -> fail 0. Otherwise start at 5 (baseScore): empty file -3, else < 50 chars -1; blocked for User-agent * by robots.txt -2; +1 if format valid (first non-empty line is '# Title' AND at least one markdown link). Clamp to 0..6. Status: >= 5 pass, >= 2 warning, else fail.",
+    "rules": [
+      {
+        "condition": "GET /llms.txt (timeout 2500 ms) not ok (any non-2xx, including 403/429/503/timeout/network error)",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "file length (JS string length of body) === 0",
+        "points": "-3"
+      },
+      {
+        "condition": "else file length < 50",
+        "points": "-1"
+      },
+      {
+        "condition": "robots.txt exists and path '/llms.txt' not allowed by the User-agent: * group (RobotsParser.isPathAllowed on rules.global: any matching Allow wins first, then any matching Disallow blocks; patterns support * and $, '?' treated as single-char wildcard)",
+        "points": "-2"
+      },
+      {
+        "condition": "file length > 10000",
+        "points": "0",
+        "note": "issue text only, no penalty"
+      },
+      {
+        "step": "format validation",
+        "condition": "hasH1 = first non-empty line (trimmed) matches /^#\\s+\\S/ ; linkCount = matches of /\\[[^\\]]+\\]\\([^)]+\\)/g ; valid = hasH1 AND linkCount > 0. hasSummary (/^>\\s+\\S/m) and sectionCount (/^##\\s+/gm) are informational."
+      },
+      {
+        "condition": "format valid",
+        "points": "+1"
+      },
+      {
+        "condition": "format invalid and file non-empty",
+        "points": "0",
+        "note": "format issues added to message only"
+      },
+      {
+        "step": "clamp",
+        "condition": "finalScore = max(0, min(6, score))"
+      },
+      {
+        "condition": "/llms-full.txt response.ok",
+        "points": "0",
+        "note": "informational; recommendation suggests adding it when absent"
+      },
+      {
+        "condition": "exception thrown (e.g. body undefined)",
+        "status": "fail",
+        "points": 0
+      }
+    ],
+    "status_mapping": "finalScore >= 5 pass, >= 2 warning, else fail. Typical: valid file 6 pass; exists but no H1/links 5 pass; short (< 50) valid 5 pass; blocked by robots 3 or 4 warning; empty file 2 warning; not found 0 fail.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/ai-access/llms-txt.mjs",
+    "source_procedure": "1) Look for llms.txt served at the site root: static root/llms.txt; Astro public/llms.txt or src/pages/llms.txt.ts (endpoint) or an llms.txt integration in astro.config.*; Hugo static/llms.txt or an output format/template (layouts/index.llms.txt, outputFormats in hugo.toml); Eleventy passthrough-copied llms.txt or llms.txt.njk/.liquid with permalink /llms.txt; Next.js public/llms.txt or app/llms.txt/route.ts; Vite public/llms.txt. 2) Not found -> 0 fail. 3) Read (or render) the file: length 0 -> -3, length < 50 -> -1. 4) Parse robots.txt (see source locations for robots.txt) using the User-agent: * group only and test '/llms.txt' with Allow-first then Disallow prefix/wildcard matching -> -2 if blocked. 5) Validate format: first non-empty line '# X' and at least one [text](url) link -> +1. 6) Clamp 0..6, map status. 7) Also report whether llms-full.txt exists (no score)."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Hosts can serve a 200 HTML fallback for unknown paths (SPA rewrites in _redirects, vercel.json, netlify.toml): the extension would then count /llms.txt as found with base 5 (pass) even though no file exists; source analysis should report absent. Conversely, WAF/bot protection returning 403 makes the extension fail where source shows the file. Generated llms.txt (endpoints, plugins, CMS) must be rendered to measure. Cloudflare-managed or CDN-level robots.txt changes are not visible in source."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/ai-access.llms-txt.md",
+  "fix_summary": "Generate an llms.txt at the public root (public/ for Astro/Next/Vite, static/ for Hugo, passthrough for Eleventy, repo root for static sites) with '# Site Name', a '> summary' line and '## Section' lists of [Title](url): description links built from the sitemap/pages; optionally also llms-full.txt. Ensure robots.txt does not Disallow /llms.txt for User-agent: *.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "llms.txt.present",
+    "llms.txt.size",
+    "llms.txt.robots_allowed",
+    "llms.txt.format.h1",
+    "llms.txt.format.links",
+    "llms.full.present"
+  ],
+  "extension_source": "src/shared/checks/llms-txt-checker.js"
+}

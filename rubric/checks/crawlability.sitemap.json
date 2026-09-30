@@ -1,0 +1,84 @@
+{
+  "id": "crawlability.sitemap",
+  "extension_key": "sitemap",
+  "name": "Sitemap Detection",
+  "category": "crawlability",
+  "weight": 5,
+  "conditional": false,
+  "description": "Probes common sitemap locations at the site root, checks that the sitemap contains URLs and that robots.txt declares a Sitemap. Sitemaps let AI crawlers and search engines discover and refresh all pages rather than relying on link crawling.",
+  "inputs": [
+    "GET {origin}/sitemap.xml, /sitemap_index.xml, /sitemap-index.xml, /sitemap1.xml (sequential, first response.ok wins, no timeout)",
+    "robots.txt via AnalysisContext.getRobotsTxt()",
+    "current page URL"
+  ],
+  "scoring": {
+    "summary": "Probe the four locations in order; if none returns HTTP 2xx: fail, 0. Otherwise start at 5: -1 if robots.txt text is unavailable (404 or unreachable), -2 if robots.txt does not contain the substring \"sitemap:\" (case-insensitive, also applied when robots.txt is missing, so missing robots.txt costs 3), -2 if the sitemap body contains zero \"<loc>\" substrings. Clamp at 0. Possible scores: 5 (all good), 3 (not referenced, or empty), 2 (no robots.txt), 1 (not referenced and empty), 0 (no robots.txt and empty, or no sitemap).",
+    "rules": [
+      {
+        "id": "sitemap.exists",
+        "condition": "none of /sitemap.xml, /sitemap_index.xml, /sitemap-index.xml, /sitemap1.xml returns response.ok (2xx after following redirects)",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "id": "sitemap.robots_present",
+        "condition": "getRobotsTxt() returns null (robots.txt non-2xx, including 404 and unreachable)",
+        "points": "-1"
+      },
+      {
+        "id": "sitemap.robots_reference",
+        "condition": "robots.txt missing OR lowercase robots.txt does not include \"sitemap:\"",
+        "points": "-2",
+        "note": "Any Sitemap: line counts, even if it points to a different URL than the one found."
+      },
+      {
+        "id": "sitemap.has_urls",
+        "condition": "count of literal \"<loc>\" substrings in sitemap body == 0",
+        "points": "-2"
+      },
+      {
+        "id": "sitemap.contains_current_page",
+        "condition": "sitemap body does not include the exact current URL string and body lacks \"<sitemapindex\"",
+        "points": 0,
+        "note": "informational only, no penalty"
+      },
+      {
+        "id": "sitemap.is_index",
+        "condition": "body includes \"<sitemapindex\"",
+        "points": 0,
+        "note": "informational; child sitemaps are not fetched, <loc> count includes index entries"
+      }
+    ],
+    "status_mapping": "score >= 5 -> pass; score >= 2 -> warning; else fail.",
+    "inconclusive": "Not implemented. Sitemap probes do not use isUnreachable: a 403/429/503/timeout on every location is scored as \"No sitemap.xml found\" (fail 0), and an unreachable robots.txt is penalized the same as a 404 (-3). This contradicts the project rule in CLAUDE.md."
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/crawlability/sitemap.mjs",
+    "source_procedure": "Static: look for a sitemap file served at the root: public/sitemap.xml, static/sitemap.xml, root sitemap.xml (static HTML), sitemap_index.xml, sitemap-index.xml, sitemap1.xml. Generated sitemaps: Astro @astrojs/sitemap in astro.config.* integrations (emits sitemap-index.xml and sitemap-0.xml; requires site set, else it emits nothing); Hugo generates sitemap.xml by default unless disableKinds contains \"sitemap\" (check hugo.toml/config.toml); Eleventy: a sitemap.njk/sitemap.xml.* template with permalink /sitemap.xml or @quasibit/eleventy-plugin-sitemap; Next.js app router: app/sitemap.ts|js|xml (serves /sitemap.xml), pages router: next-sitemap config/postbuild or pages/sitemap.xml.*; Vite SPA: public/sitemap.xml or a vite sitemap plugin (vite-plugin-sitemap). Also check host redirects/rewrites (_redirects, vercel.json, netlify.toml) that map one of the four paths. If the sitemap is generated with a non-probed name only (e.g. only /sitemap-0.xml), it is NOT found by the extension. Empty check: static file has at least one <loc>; generators with at least one page count as non-empty. robots.txt: public/robots.txt, static/robots.txt, root robots.txt, Next.js app/robots.ts (sitemap field), astro-robots-txt integration, Hugo enableRobotsTXT + layouts/robots.txt; check presence and a case-insensitive \"Sitemap:\" line.",
+    "llm_criteria": "Model judges whether a generator config will actually emit a file at one of the four probed paths (e.g. Astro sitemap without site config, conditional Next.js sitemap routes, Hugo disableKinds) and whether the generated sitemap would contain at least one URL."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Static files give full parity. Divergence: generated sitemaps depend on build config; hosting may add, rewrite or block routes (WAF/bot protection returning 403 makes the extension report no sitemap); a CMS or server may serve a sitemap not present in the repo; a SPA fallback that returns index.html with 200 for /sitemap.xml counts as \"found\" in the extension but with 0 <loc> (score 3 or lower); robots.txt may be generated by the host (e.g. Cloudflare managed robots.txt) and differ from the repo."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/crawlability.sitemap.md",
+  "fix_summary": "Add a sitemap at /sitemap.xml or /sitemap-index.xml (Astro @astrojs/sitemap plus site in astro.config, Hugo default sitemap, Next.js app/sitemap.ts, Eleventy sitemap template, public/sitemap.xml for Vite/static) and add \"Sitemap: https://<domain>/sitemap.xml\" to robots.txt (public/robots.txt, static/robots.txt, app/robots.ts). Requires knowing the production domain.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "sitemap.exists",
+    "sitemap.robots_present",
+    "sitemap.robots_reference",
+    "sitemap.has_urls",
+    "sitemap.contains_current_page",
+    "sitemap.is_index"
+  ],
+  "extension_source": "src/shared/checks/sitemap-checker.js"
+}

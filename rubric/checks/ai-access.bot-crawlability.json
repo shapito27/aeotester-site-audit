@@ -1,0 +1,117 @@
+{
+  "id": "ai-access.bot-crawlability",
+  "extension_key": "aiBotCrawlability",
+  "name": "AI Bot Crawlability",
+  "category": "ai-access",
+  "weight": 12,
+  "conditional": false,
+  "description": "Parses the origin's robots.txt and tests, for each of the 126 AI crawler user-agent tokens in the bundled ai-robots-txt list, whether that bot may crawl the current page path. If AI crawlers are blocked they cannot fetch the page, so it cannot be cited or used by AI search and assistants.",
+  "inputs": [
+    "robots.txt at site root (HTTP GET <origin>/robots.txt)",
+    "current page URL path",
+    "src/data/robots.json (bundled AI bot list, 126 keys)"
+  ],
+  "scoring": {
+    "summary": "robots.txt missing (any non-2xx, including unreachable) gives warning 8/12. An empty (whitespace-only) robots.txt gives pass 12/12. Otherwise every bot name in robots.json is evaluated with RobotsParser.canBotCrawlPath(botName, pathname); score = round(allowedCount / totalBots * 12). If any ALLOWED bot has an effective crawl-delay > 5, subtract 2 (floor 0). Status is pass only if all bots are allowed and no delay warnings; warning if allowedCount > blockedCount; otherwise fail. There is no prioritization or weighting of bots: all 126 count equally.",
+    "rules": [
+      {
+        "condition": "robots.txt fetch not ok (ctx.getRobotsTxt() returns null: 404, 403, 429, 503, 5xx, timeout, network error)",
+        "status": "warning",
+        "points": 8,
+        "message": "robots.txt not found - all bots allowed by default"
+      },
+      {
+        "condition": "robots.txt body is empty after trim()",
+        "status": "pass",
+        "points": 12
+      },
+      {
+        "condition": "bot list failed to load (aiBots.length === 0; unreachable in practice because loadBotList falls back to a 5-bot list on error)",
+        "status": "warning",
+        "points": 6
+      },
+      {
+        "condition": "parser: lines split on \\n, trimmed; blank lines and lines starting with # skipped; directive prefixes matched case-insensitively: 'user-agent:', 'disallow:', 'allow:', 'crawl-delay:' (parseInt), 'sitemap:'. Empty Disallow/Allow values are ignored. Inline comments after values are NOT stripped.",
+        "points": "n/a"
+      },
+      {
+        "condition": "parser group handling: each User-agent line sets currentAgent; rules are attached only to the LAST user-agent line before them. 'User-agent: *' goes to global. Consecutive User-agent lines (a grouped record) leave earlier agents with an empty rule set, which means allowed.",
+        "points": "n/a"
+      },
+      {
+        "condition": "rule selection: rules.botSpecific[botName] with EXACT, case-sensitive key match on the token written in robots.txt; if absent, the global (*) rules are used. A bot-specific group completely replaces global Allow/Disallow.",
+        "points": "n/a"
+      },
+      {
+        "condition": "path match: Allow patterns checked first, any match => allowed; then Disallow patterns, any match => blocked; no match => allowed. No longest-match precedence. Pattern '/' matches every path. '*' => '.*', '?' => '.', trailing '$' anchors end; regex anchored at start. Path tested is URL.pathname only (no query string).",
+        "points": "n/a"
+      },
+      {
+        "condition": "crawl delay: effective delay = botRules.crawlDelay || global.crawlDelay || null (global delay applies even to bots with their own group). Only counted for allowed bots; delay > 5 seconds adds a delay warning.",
+        "points": "n/a"
+      },
+      {
+        "condition": "base score",
+        "points": "Math.round((allowedCount / totalBots) * 12)"
+      },
+      {
+        "condition": "one or more allowed bots have crawl-delay > 5",
+        "points": "-2 (once, floor 0)"
+      },
+      {
+        "condition": "allowedCount === totalBots AND no delay warnings",
+        "status": "pass"
+      },
+      {
+        "condition": "else allowedCount > blockedCount",
+        "status": "warning"
+      },
+      {
+        "condition": "else",
+        "status": "fail"
+      }
+    ],
+    "bot_list": {
+      "source": "src/data/robots.json (ai-robots-txt/ai.robots.txt), keys of the top-level object, loaded via utils.loadBotList() and cached in chrome.storage.local under botListVersion '1.0.0'",
+      "count": 126,
+      "prioritized": "none - every bot has equal weight in allowedCount/totalBots",
+      "fallback_if_load_fails": [
+        "GPTBot",
+        "ChatGPT-User",
+        "Google-Extended",
+        "claudebot",
+        "Amazonbot"
+      ],
+      "names": "AddSearchBot, AI2Bot, AI2Bot-DeepResearchEval, Ai2Bot-Dolma, aiHitBot, amazon-kendra, Amazonbot, AmazonBuyForMe, Andibot, Anomura, anthropic-ai, Applebot, Applebot-Extended, atlassian-bot, Awario, bedrockbot, bigsur.ai, Bravebot, Brightbot 1.0, BuddyBot, Bytespider, CCBot, ChatGLM-Spider, ChatGPT Agent, ChatGPT-User, Claude-SearchBot, Claude-User, Claude-Web, ClaudeBot, Cloudflare-AutoRAG, CloudVertexBot, cohere-ai, cohere-training-data-crawler, Cotoyogi, Crawlspace, Datenbank Crawler, DeepSeekBot, Devin, Diffbot, DuckAssistBot, Echobot Bot, EchoboxBot, FacebookBot, facebookexternalhit, Factset_spyderbot, FirecrawlAgent, FriendlyCrawler, Gemini-Deep-Research, Google-CloudVertexBot, Google-Extended, Google-Firebase, Google-NotebookLM, GoogleAgent-Mariner, GoogleOther, GoogleOther-Image, GoogleOther-Video, GPTBot, iAskBot, iaskspider, iaskspider/2.0, IbouBot, ICC-Crawler, ImagesiftBot, imageSpider, img2dataset, ISSCyberRiskCrawler, Kangaroo Bot, KlaviyoAIBot, KunatoCrawler, laion-huggingface-processor, LAIONDownloader, LCC, LinerBot, Linguee Bot, LinkupBot, Manus-User, meta-externalagent, Meta-ExternalAgent, meta-externalfetcher, Meta-ExternalFetcher, meta-webindexer, MistralAI-User, MistralAI-User/1.0, MyCentralAIScraperBot, netEstate Imprint Crawler, NotebookLM, NovaAct, OAI-SearchBot, omgili, omgilibot, OpenAI, Operator, PanguBot, Panscient, panscient.com, Perplexity-User, PerplexityBot, PetalBot, PhindBot, Poggio-Citations, Poseidon Research Crawler, QualifiedBot, QuillBot, quillbot.com, SBIntuitionsBot, Scrapy, SemrushBot-OCOB, SemrushBot-SWA, ShapBot, Sidetrade indexer bot, Spider, TerraCotta, Thinkbot, TikTokSpider, Timpibot, VelenPublicWebCrawler, WARDBot, Webzio-Extended, webzio-extended, wpbot, WRTNBot, YaK, YandexAdditional, YandexAdditionalBot, YouBot, ZanistaBot"
+    },
+    "status_mapping": "Explicit: pass iff all bots allowed and no crawl-delay > 5; warning if allowed > blocked; else fail. Early exits: missing robots.txt = warning/8, empty robots.txt = pass/12.",
+    "inconclusive": "Not implemented. The check uses ctx.getRobotsTxt() only, so an unreachable robots.txt (0/403/429/503/timeout) is treated exactly like a 404: warning, 8 points, message 'robots.txt not found'. No details.inconclusive flag."
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/ai-access/bot-crawlability.mjs",
+    "source_procedure": "1) Locate the robots.txt that will be served at the site root: static HTML / Vite / Next.js: public/robots.txt (or root robots.txt for plain static); Astro: public/robots.txt or src/pages/robots.txt.ts (generated - evaluate the returned string if literal, otherwise flag); Hugo: static/robots.txt, or layouts/robots.txt when enableRobotsTXT = true in hugo.toml/config.toml (default Hugo template is 'User-agent: *' only); Eleventy: robots.txt passthrough copy in .eleventy.js or a robots.njk/robots.11ty.js template; Next.js app router: app/robots.ts|js (MetadataRoute.Robots object - convert rules to text) or app/robots.txt. 2) If none exists, score warning/8. If it exists but is whitespace-only, pass/12. 3) Otherwise reproduce the parser exactly (last-user-agent-wins grouping bug, case-sensitive exact token match, Allow-before-Disallow, global crawl-delay inheritance) and evaluate all 126 names from robots.json against the page path being audited (use '/' for the site-level audit, or each page's route path). 4) Compute round(allowed/126*12), minus 2 if any allowed bot's effective crawl-delay > 5; derive status."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Full parity when robots.txt is a static file in the repo. Differences: host-generated or CDN-managed robots.txt (Cloudflare 'AI Scrapers and Crawlers' managed robots.txt, Vercel/Netlify rewrites, WordPress virtual robots.txt) is invisible in source; dynamic generators (Next.js robots.ts, Astro endpoints) need evaluation; an SPA fallback that serves index.html with 200 for /robots.txt would be parsed by the extension as a non-empty file with no directives (pass 12) while source shows no file (warning 8); the extension also scores a WAF-blocked robots.txt as missing. Per-page path results differ only if Disallow rules target specific paths."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/ai-access.bot-crawlability.md",
+  "fix_summary": "Create or edit robots.txt so AI crawlers are allowed (e.g. remove 'Disallow: /' under AI bot groups, avoid Crawl-delay > 5), or add an empty/permissive 'User-agent: *\\nAllow: /' file. Place it at public/robots.txt (Vite, Next.js, Astro), static/robots.txt (Hugo), a passthrough file (Eleventy) or site root (static HTML); for Next.js app/robots.ts edit the rules array. Write one User-agent line per group to avoid the extension's grouping bug.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "robots.present",
+    "robots.empty",
+    "robots.ai_bots.allowed_ratio",
+    "robots.ai_bots.blocked_list",
+    "robots.crawl_delay.excessive"
+  ],
+  "extension_source": "src/shared/checks/ai-bot-crawlability.js"
+}

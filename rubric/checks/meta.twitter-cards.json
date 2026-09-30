@@ -1,0 +1,82 @@
+{
+  "id": "meta.twitter-cards",
+  "extension_key": "twitterCards",
+  "name": "Twitter Cards",
+  "category": "meta",
+  "weight": 3,
+  "conditional": false,
+  "description": "Checks for Twitter/X Card meta tags (twitter:card, twitter:title, twitter:description, twitter:image) with a valid card type, giving partial credit when only Open Graph tags exist. These tags control link previews on X and are extra structured metadata LLMs can read.",
+  "inputs": [
+    "page HTML <head>: meta[name|property=twitter:*]",
+    "meta[property=og:title|og:description|og:image]"
+  ],
+  "scoring": {
+    "summary": "Tags are read with meta[name=\"twitter:X\"] falling back to meta[property=\"twitter:X\"]. If none of twitter:card/title/description/image exist (null) but any og:title/og:description/og:image has non-empty content, return warning 2. Otherwise start at 3: -0.75 per missing required tag (card, title, description), -0.75 per present-but-empty (whitespace) required tag, -0.5 if twitter:image missing, -0.25 if twitter:card value not in [summary, summary_large_image, app, player]. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "rules": [
+      {
+        "condition": "getMetaContent(name): document.querySelector('meta[name=\"'+name+'\"]') || document.querySelector('meta[property=\"'+name+'\"]'); returns its content or null if no element",
+        "points": "n/a"
+      },
+      {
+        "condition": "twitter:card, twitter:title, twitter:description, twitter:image all null AND (og:title || og:description || og:image content truthy)",
+        "status": "warning",
+        "points": 2,
+        "note": "early return, OG fallback"
+      },
+      {
+        "condition": "each required tag (card, title, description) missing (null)",
+        "points": "-0.75 each"
+      },
+      {
+        "condition": "each required tag present but content.trim() empty",
+        "points": "-0.75 each"
+      },
+      {
+        "condition": "twitter:image missing (null); empty twitter:image is NOT penalized",
+        "points": "-0.5"
+      },
+      {
+        "condition": "twitter:card truthy and not one of ['summary', 'summary_large_image', 'app', 'player'] (exact, case-sensitive)",
+        "points": "-0.25"
+      },
+      {
+        "condition": "twitter:site and twitter:creator",
+        "points": "0 (informational)"
+      },
+      {
+        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: all 4 tags valid => 3 pass; only image missing => 2.5 pass/2; invalid card type => 2.75 pass/2; one required missing => 2.25 warning/2 (1.75 warning/1 if image also missing); no twitter and no OG => 0.25 fail/0; OG-only => warning/2.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/meta/twitter-cards.mjs",
+    "source_procedure": "Per page, collect twitter:* and og:* meta tags from the head. Static HTML / Vite: *.html, index.html. Astro: src/layouts/*.astro, SEO components (e.g. astro-seo props twitter={...}), src/components/**/Head*.astro. Hugo: layouts/partials/head*.html, including internal templates {{ template \"_internal/twitter_cards.html\" . }} and \"_internal/opengraph.html\" (these emit twitter:card, twitter:title, twitter:description, and twitter:image when images configured). Eleventy: _includes/** layouts. Next.js app router: metadata.twitter {card, title, description, images} and metadata.openGraph in app/**/layout.tsx|page.tsx (Next emits name=\"twitter:*\"; whether Next.js derives twitter tags from openGraph depends on version, so inspect the build output if unsure); pages router: <Head> tags, next-seo DefaultSeo twitter config. Apply the rules above."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Exact for literal tags. Differs for tags injected at runtime (react-helmet in SPAs), SEO plugins/framework defaults that emit tags not visible in source (Hugo internal templates, Next.js metadata merging, Astro SEO integrations), and template values that may render empty at build time."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/meta.twitter-cards.md",
+  "fix_summary": "Add <meta name=\"twitter:card\" content=\"summary_large_image\">, twitter:title, twitter:description and twitter:image to the shared head layout, populated from the same variables as the page title/description/OG image (Next.js metadata.twitter, Hugo _internal/twitter_cards.html, Astro/Eleventy layout head).",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "social.twitter.card",
+    "social.twitter.card_type_valid",
+    "social.twitter.title",
+    "social.twitter.description",
+    "social.twitter.image",
+    "social.twitter.og_fallback"
+  ],
+  "extension_source": "src/shared/checks/twitter-cards-checker.js"
+}

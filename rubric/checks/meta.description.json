@@ -1,0 +1,103 @@
+{
+  "id": "meta.description",
+  "extension_key": "metaDescription",
+  "name": "Meta Description",
+  "category": "meta",
+  "weight": 5,
+  "conditional": false,
+  "description": "Checks that the page has a non-empty, well-sized, non-generic <meta name=\"description\"> that is not a copy of the title and not keyword-stuffed. Search engines and LLMs use the description as a compact summary and snippet of the page.",
+  "inputs": [
+    "page HTML <head>: meta[name=\"description\"] content",
+    "document.title"
+  ],
+  "scoring": {
+    "summary": "Start at 5. Missing tag or empty (trimmed length 0) => fail 0 immediately. Otherwise deduct for length (trimmed length: <70 -2; 70-119 -1; >170 -1; 161-170 -0.5; 120-160 no deduction), generic/placeholder opening (-2), exact match with title (-1) and keyword stuffing (-0.5). finalScore = max(0, round(score*10)/10). Status is derived from the unrounded-down finalScore, then the reported score is Math.floor(finalScore).",
+    "rules": [
+      {
+        "condition": "no element matches document.querySelector('meta[name=\"description\"]') (first match only; attribute name match is case-sensitive in selector value)",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "content.trim().length === 0",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "trimmed length < 70",
+        "points": "-2",
+        "lengthStatus": "too_short"
+      },
+      {
+        "condition": "70 <= length < 120",
+        "points": "-1",
+        "lengthStatus": "short"
+      },
+      {
+        "condition": "length > 170",
+        "points": "-1",
+        "lengthStatus": "too_long"
+      },
+      {
+        "condition": "161 <= length <= 170",
+        "points": "-0.5",
+        "lengthStatus": "long"
+      },
+      {
+        "condition": "120 <= length <= 160",
+        "points": "0",
+        "lengthStatus": "optimal"
+      },
+      {
+        "condition": "trimmed description matches any generic regex (case-insensitive): /^welcome to/, /^this is a/, /^this page/, /^description$/, /^lorem ipsum/, /^todo/, /^placeholder/, /^my website/, /^my blog/, /^my site/, /^about us$/, /^contact us$/, /^contact$/, /^services$/, /^products$/, /^home page/, /^homepage$/, /^default description/, /^add description here/, /^enter description/, /^website description/, /^page description/",
+        "points": "-2"
+      },
+      {
+        "condition": "description.toLowerCase().trim() === document.title.toLowerCase().trim()",
+        "points": "-1"
+      },
+      {
+        "condition": "keyword stuffing: split lowercase description on /\\s+/, count words with length > 3; max count > 3 AND total word count > 10",
+        "points": "-0.5"
+      },
+      {
+        "condition": "CTA regex /\\b(learn|discover|find|get|see|read|explore|check|try|start)\\b/i",
+        "points": "0 (informational, details.hasCta only)"
+      },
+      {
+        "condition": "finalScore = max(0, round(score*10)/10); reported score = Math.floor(finalScore)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": "Using the decimal finalScore (before floor): >= 4 pass, >= 2.5 warning, else fail. Reported score is floor(finalScore), so e.g. 4.5 => pass with 4 points, 3.5 => warning with 3 points.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/meta/description.mjs",
+    "source_procedure": "Find the description meta and title per page. Static HTML / Vite: <meta name=\"description\"> and <title> in each *.html / index.html. Astro: src/layouts/*.astro and page frontmatter props passed to the layout (e.g. description prop) in src/pages/**. Hugo: layouts/_default/baseof.html, layouts/partials/head*.html; value usually from .Description / .Params.description / site.Params.description in hugo.toml/config.toml and content front matter. Eleventy: _includes/** layout plus front matter 'description' in src/**. Next.js app router: export const metadata / generateMetadata in app/**/layout.tsx and page.tsx (description, title, title.template); pages router: <Head> in pages/_app, _document or per page, next-seo configs. Resolve template variables from front matter/config where possible, then apply the rules above with the final string lengths."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Exact when the description is a literal in HTML or front matter. Differs when the value is computed at runtime (JS-injected via react-helmet/SPA, CMS-fetched data, generateMetadata with remote data), when a title template suffix changes document.title (affects the title-equality rule), or when a framework adds a default description. HTML entities must be decoded before measuring length."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/meta.description.md",
+  "fix_summary": "Add or rewrite <meta name=\"description\" content=\"...\"> with 120-160 characters (ideally 150-160), unique per page, not identical to the title and not starting with generic phrases. Place in the head layout (Astro layout prop, Hugo front matter description, Eleventy front matter, Next.js metadata.description, index.html for Vite); the plugin can draft text from page content but the user should approve it.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "meta.description.present",
+    "meta.description.nonempty",
+    "meta.description.length",
+    "meta.description.generic",
+    "meta.description.equals_title",
+    "meta.description.keyword_stuffing"
+  ],
+  "extension_source": "src/shared/checks/meta-description-checker.js"
+}

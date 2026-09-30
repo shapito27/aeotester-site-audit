@@ -1,0 +1,85 @@
+{
+  "id": "content.freshness",
+  "extension_key": "contentFreshness",
+  "name": "Content Freshness",
+  "category": "content",
+  "weight": 5,
+  "conditional": false,
+  "description": "Checks whether the page exposes machine-readable publish and modified dates via article:published_time / article:modified_time meta, JSON-LD datePublished / dateModified, or <time datetime> elements. Dates let AI engines judge recency when choosing sources to cite. It does not evaluate how old the dates are.",
+  "inputs": [
+    "meta[property=\"article:published_time\"], meta[property=\"article:modified_time\"]",
+    "script[type=\"application/ld+json\"] contents (recursive search)",
+    "time[datetime] elements"
+  ],
+  "scoring": {
+    "summary": "Publish date found if article:published_time has content or any JSON-LD block contains a truthy datePublished at any nesting depth. Modified date found if article:modified_time has content, or any JSON-LD block contains a truthy dateModified at any depth, or any <time datetime> element exists. Neither => fail 0. Otherwise start at 5 and subtract 2 for whichever is missing. Result: both => 5 pass; one only => 3 warning.",
+    "rules": [
+      {
+        "condition": "hasPublishDate: meta[property=\"article:published_time\"] content truthy",
+        "points": "n/a"
+      },
+      {
+        "condition": "hasModifiedDate: meta[property=\"article:modified_time\"] content truthy",
+        "points": "n/a"
+      },
+      {
+        "condition": "JSON-LD: each script[type=\"application/ld+json\"] JSON.parse'd (invalid JSON skipped silently); findPropertyInObject recursively searches objects and arrays for own property 'datePublished' / 'dateModified' with truthy value",
+        "points": "n/a"
+      },
+      {
+        "condition": "hasTimeElements: document.querySelectorAll('time[datetime]').length > 0 (counts as a MODIFIED signal)",
+        "points": "n/a"
+      },
+      {
+        "condition": "foundPublish = hasPublishDate || hasJsonLdPublish; foundModified = hasModifiedDate || hasJsonLdModified || hasTimeElements",
+        "points": "n/a"
+      },
+      {
+        "condition": "neither foundPublish nor foundModified",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "!foundPublish",
+        "points": "-2"
+      },
+      {
+        "condition": "!foundModified",
+        "points": "-2"
+      },
+      {
+        "condition": "finalScore = max(0, score) (integer)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": ">= 4 pass, >= 2 warning, else fail. Reachable: 5 pass, 3 warning, 0 fail.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/content/freshness.mjs",
+    "source_procedure": "Per page, look for date signals in the rendered output. Static HTML: meta/JSON-LD/<time datetime> in *.html. Astro: layouts and page components (frontmatter pubDate/updatedDate often rendered via <time datetime={...}> or JSON-LD in BaseHead.astro); content collections schema in src/content/config.ts. Hugo: layouts/partials/head*.html, _internal/opengraph.html (emits article:published_time and article:modified_time for pages with .Date/.Lastmod when page is a regular page in a section), _internal/schema.html, single.html <time datetime=\"{{ .Date.Format ... }}\">; front matter date/lastmod. Eleventy: layouts in _includes/** using page.date / front matter. Next.js: metadata.openGraph {type: 'article', publishedTime, modifiedTime} (emits article:published_time/modified_time), JSON-LD <script> in page.tsx, <time dateTime> in components. Vite SPA: components. Determine which signals will be present on the audited page type (e.g. blog posts vs home page) and apply the rules."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Signals are usually template-driven and conditional (only on article pages, only when front matter has dates), so source analysis must resolve which templates apply to which pages. JSON-LD or <time> elements injected by JS, CMS content, or third-party widgets (e.g. comment timestamps with <time datetime>) are visible to the extension but not the repo. Any <time datetime> anywhere on the page (even in a footer or widget) counts as a modified date."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/content.freshness.md",
+  "fix_summary": "Emit both dates: add article:published_time and article:modified_time meta (or Next.js metadata.openGraph publishedTime/modifiedTime, Hugo _internal/opengraph.html with date/lastmod), and/or JSON-LD datePublished/dateModified, and render <time datetime=\"...\"> for the updated date in the article template. Wiring templates is automatic; real date values come from front matter or git history and may need user confirmation.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "freshness.published.meta",
+    "freshness.published.jsonld",
+    "freshness.modified.meta",
+    "freshness.modified.jsonld",
+    "freshness.modified.time_element"
+  ],
+  "extension_source": "src/shared/checks/content-freshness-checker.js"
+}

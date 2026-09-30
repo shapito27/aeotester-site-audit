@@ -1,0 +1,70 @@
+{
+  "id": "content.headings",
+  "extension_key": "semanticHeadings",
+  "name": "Semantic Headings",
+  "category": "content",
+  "weight": 8,
+  "conditional": false,
+  "description": "Checks the H1-H6 outline: at least one heading, exactly one H1, no skipped levels, and not too many generic or very short headings. AI engines use the heading hierarchy to segment content into answerable sections.",
+  "inputs": [
+    "rendered DOM: all h1-h6 elements in document order and their textContent"
+  ],
+  "scoring": {
+    "summary": "No headings at all => fail 0. Otherwise start at 8: no H1 -3, or more than one H1 -2; -1 per skipped level (a heading whose level > previous heading level + 1), capped at -2; -1 if more than 3 generic/short headings. Score is an integer; status pass >= 6, warning >= 4, else fail.",
+    "rules": [
+      {
+        "condition": "document.querySelectorAll('h1, h2, h3, h4, h5, h6').length === 0",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "zero <h1>",
+        "points": "-3"
+      },
+      {
+        "condition": "more than one <h1>",
+        "points": "-2"
+      },
+      {
+        "condition": "skipped level: iterating headings in document order, with lastLevel = previous heading level (starts 0, first heading never flagged), level > lastLevel + 1. Going up (H4 -> H2) is fine.",
+        "points": "-1 each, max -2"
+      },
+      {
+        "condition": "generic heading: textContent.toLowerCase().trim() length < 3, OR exactly equals one of ['introduction', 'overview', 'welcome', 'about', 'more', 'info', 'content', 'section', 'chapter', 'home']. If count of generic headings > 3",
+        "points": "-1"
+      },
+      {
+        "condition": "finalScore = max(0, score)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": ">= 6 pass, >= 4 warning, else fail (integer score, no flooring needed). Worst case 8-3-2-1 = 2 fail.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/content/headings.mjs",
+    "source_procedure": "Compose the full rendered markup per page in document order: layout header, page body, components, footer. Static HTML: each *.html. Astro: layout + src/pages/** + components (headings in components count). Hugo: baseof.html + single/list templates + partials, plus headings from Markdown content (#, ##, ... map to h1-h6; note Hugo/most themes render the page title as <h1> in the template, so a '# ' in content makes a second H1). Eleventy: layouts + Markdown/Nunjucks content. Next.js: layout.tsx + page.tsx JSX headings, MDX content. Vite SPA: root components and routed views. Extract heading level and text, then apply the rules."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension counts every h1-h6 in the live DOM, including visually hidden ones, headings in cookie banners, chat widgets, modals and client-rendered content. Source analysis must resolve component composition order and Markdown-to-HTML heading mapping; headings rendered from CMS data or conditionally are uncertain. Text from template variables affects the generic-heading rule."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/content.headings.md",
+  "fix_summary": "Ensure exactly one <h1> per page (usually the page title in the layout; demote extra H1s in content or header logos to h2/p), fix skipped levels by changing heading tags in templates/Markdown, and rename generic headings to descriptive text. Tag-level changes can be auto-applied; renaming generic headings needs user content.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "headings.present",
+    "headings.h1.single",
+    "headings.hierarchy.no_skips",
+    "headings.text.descriptive"
+  ],
+  "extension_source": "src/shared/checks/heading-analyzer.js"
+}

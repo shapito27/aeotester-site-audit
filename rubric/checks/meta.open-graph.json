@@ -1,0 +1,85 @@
+{
+  "id": "meta.open-graph",
+  "extension_key": "openGraph",
+  "name": "Open Graph",
+  "category": "meta",
+  "weight": 3,
+  "conditional": false,
+  "description": "Checks for Open Graph meta tags (og:title, og:description, og:image required; og:url, og:type recommended) and that og:url agrees with the canonical URL. OG tags give social platforms and LLM crawlers a clean, structured summary of the page.",
+  "inputs": [
+    "page HTML <head>: meta[property=og:*]",
+    "link[rel=\"canonical\"] href"
+  ],
+  "scoring": {
+    "summary": "Tags are read only via meta[property=\"og:X\"]. Start at 3: -0.75 per missing required tag (og:title, og:description, og:image), -0.75 per present-but-empty required tag, -0.25 if og:url missing, -0.25 if og:type missing, -0.25 if og:url and a canonical both exist and normalizeUrl(og:url) !== normalizeUrl(canonical href). An og:image that is not an absolute URL adds an issue but no deduction. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "rules": [
+      {
+        "condition": "getMetaContent(p) = document.querySelector('meta[property=\"'+p+'\"]')?.content, null if element absent (meta name=\"og:*\" is NOT read)",
+        "points": "n/a"
+      },
+      {
+        "condition": "each of og:title, og:description, og:image missing (null)",
+        "points": "-0.75 each"
+      },
+      {
+        "condition": "each of og:title, og:description, og:image present but content.trim() empty",
+        "points": "-0.75 each"
+      },
+      {
+        "condition": "og:url missing (null)",
+        "points": "-0.25"
+      },
+      {
+        "condition": "og:type missing (null)",
+        "points": "-0.25"
+      },
+      {
+        "condition": "og:image truthy but new URL(og:image) throws (relative URL such as '/img.png')",
+        "points": "0 (issue text only)"
+      },
+      {
+        "condition": "og:url truthy AND link[rel=\"canonical\"] exists AND normalizeUrl(og:url) !== normalizeUrl(canonical.href). normalizeUrl = protocol//hostname + pathname + search, trailing '/' removed, lowercased (port and hash dropped). canonical.href is resolved to absolute by the browser.",
+        "points": "-0.25"
+      },
+      {
+        "condition": "og:site_name, og:locale",
+        "points": "0 (informational)"
+      },
+      {
+        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: all present and consistent => 3 pass; missing og:url or og:type or mismatch => 2.75 pass/2; missing url+type => 2.5 pass/2; one required missing => 2.25 warning/2; nothing at all => 0.25 fail/0.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/meta/open-graph.mjs",
+    "source_procedure": "Per page, collect og:* meta tags and the canonical link. Static HTML / Vite: *.html, index.html. Astro: layouts/SEO components (astro-seo openGraph prop, custom Head.astro). Hugo: layouts/partials/head*.html, {{ template \"_internal/opengraph.html\" . }} (emits og:title, og:description, og:type, og:url, og:image when images/params set) and canonical from .Permalink; baseURL from hugo.toml. Eleventy: _includes/** layouts. Next.js app router: metadata.openGraph {title, description, images, url, type} and metadata.alternates.canonical plus metadataBase in app/**/layout.tsx|page.tsx; pages router: <Head> or next-seo. Resolve template values to strings (use site base URL from config to absolutize canonical), then apply rules."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Exact for literal tags. Differs for runtime-injected tags, framework or plugin defaults not visible in source (Hugo internal templates, Next.js metadata merging and metadataBase absolutization), template values empty at build time, and og:url vs canonical comparison when either depends on deployment base URL or trailing-slash settings of the host."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/meta.open-graph.md",
+  "fix_summary": "Add og:title, og:description, og:image (absolute URL), og:url (equal to the canonical) and og:type (website or article) as <meta property=...> in the shared head layout, or via Next.js metadata.openGraph, Hugo _internal/opengraph.html with images params, Astro/Eleventy layout head.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "social.og.title",
+    "social.og.description",
+    "social.og.image",
+    "social.og.image_absolute",
+    "social.og.url",
+    "social.og.type",
+    "social.og.url_matches_canonical"
+  ],
+  "extension_source": "src/shared/checks/opengraph-checker.js"
+}

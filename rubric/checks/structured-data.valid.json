@@ -1,0 +1,210 @@
+{
+  "id": "structured-data.valid",
+  "extension_key": "schemaValidation",
+  "name": "Schema Validation",
+  "category": "structured-data",
+  "weight": 5,
+  "conditional": false,
+  "description": "Parses every JSON-LD block, resolves @id references, walks every typed node (including nested ones) and validates known types against required-field rules. Broken or incomplete structured data is ignored or misread by AI engines and rich-result parsers, so valid markup is what actually gets used.",
+  "inputs": [
+    "rendered DOM: every script[type=\"application/ld+json\"] textContent"
+  ],
+  "scoring": {
+    "summary": "No JSON-LD blocks -> fail, 0. Otherwise start at 5; subtract 0.5 per block that fails JSON.parse; compute validationRate = round(100 * validSchemas / validatableSchemas) over all typed nodes (nested included) whose type has a validator (types without a validator are excluded; if none are validatable the rate is 100). Subtract 2 if rate < 50, 1 if rate < 80, 0.5 if rate < 100. Clamp at 0, round to 1 decimal, then Math.floor for the reported integer score.",
+    "rules": [
+      {
+        "id": "schema.present",
+        "condition": "zero script[type=\"application/ld+json\"] elements",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "id": "schema.json_syntax",
+        "condition": "each block where JSON.parse(textContent) throws",
+        "points": "-0.5 each"
+      },
+      {
+        "id": "schema.reference_resolution",
+        "condition": "before validation: build map of @id -> node from top-level data and each @graph item across all blocks; in each @graph item (or top-level node) replace values of properties mainEntity, itemListElement, acceptedAnswer, author, publisher that are exactly {\"@id\": X} (single key) with the mapped node, recursing only through those five properties and arrays",
+        "points": "n/a"
+      },
+      {
+        "id": "schema.node_collection",
+        "condition": "getSchemaTypes: every object with @type anywhere in the block (top level, @graph items, and recursively any nested object or array property except @type/@context/@graph) yields one entry per @type value (array @type yields multiple entries sharing the same data)",
+        "points": "n/a"
+      },
+      {
+        "id": "schema.validation_rate",
+        "condition": "validationRate < 50",
+        "points": "-2",
+        "issue": "Only N% of schemas pass validation"
+      },
+      {
+        "condition": "50 <= validationRate < 80",
+        "points": "-1"
+      },
+      {
+        "condition": "80 <= validationRate < 100",
+        "points": "-0.5"
+      },
+      {
+        "condition": "validationRate == 100 (including when no node has a validator)",
+        "points": 0
+      },
+      {
+        "id": "score.final",
+        "condition": "score = floor(max(0, round(score*10)/10))",
+        "points": "final",
+        "examples": "one parse error only -> 4; rate 80-99 -> 4; rate 50-79 -> 4; rate < 50 -> 3; rate < 50 plus 1 parse error -> 2; 2 parse errors -> 4; 3 parse errors -> 3"
+      },
+      {
+        "id": "schema.validators.note",
+        "condition": "Each rule below is an ISSUE (makes node invalid). Warnings never affect score. Types not listed return valid: null and are excluded from the rate (e.g. WebSite, WebPage, ImageObject, Offer, Question, Answer, HowToStep, ListItem, PostalAddress, SearchAction, Recipe, Event, Review, Dentist and any other LocalBusiness subtype not listed).",
+        "points": "n/a"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: FAQPage. Any issue makes the node invalid",
+        "issues": [
+          "mainEntity missing or not an array (stops)",
+          "each mainEntity item: @type !== \"Question\"",
+          "item missing name",
+          "item missing acceptedAnswer",
+          "acceptedAnswer @type !== \"Answer\"",
+          "acceptedAnswer missing text"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: HowTo. Any issue makes the node invalid",
+        "issues": [
+          "missing name",
+          "step missing or not an array (stops)",
+          "fewer than 2 steps",
+          "each step @type !== \"HowToStep\"",
+          "step missing both text and name"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: Product. Any issue makes the node invalid",
+        "issues": [
+          "missing name",
+          "missing image",
+          "missing description",
+          "missing offers",
+          "each offer (array or single) missing both price and priceRange",
+          "each offer missing priceCurrency",
+          "aggregateRating present but missing ratingValue"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: Organization, Corporation, GovernmentOrganization, EducationalOrganization, MedicalOrganization, NGO, Airline, LocalBusiness, Restaurant, Store, MedicalBusiness, LegalService, FinancialService, FoodEstablishment, HealthAndBeautyBusiness, HomeAndConstructionBusiness, EntertainmentBusiness, AutomotiveBusiness. Any issue makes the node invalid",
+        "issues": [
+          "missing name (only issue; url/logo/sameAs/address/telephone/openingHours are warnings)"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: Article, BlogPosting, NewsArticle, TechArticle. Any issue makes the node invalid",
+        "issues": [
+          "missing headline",
+          "missing author",
+          "author (first element if array) is an object without name",
+          "missing datePublished",
+          "datePublished not parseable by new Date() (named ISO 8601 but any Date-parseable string passes)"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: Person. Any issue makes the node invalid",
+        "issues": [
+          "missing name"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: BreadcrumbList. Any issue makes the node invalid",
+        "issues": [
+          "itemListElement missing or not an array (stops)",
+          "each item missing position (falsy, so position 0 is an issue)",
+          "each item missing both name and item.name"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: ItemList. Any issue makes the node invalid",
+        "issues": [
+          "itemListElement missing or not an array"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: VideoObject. Any issue makes the node invalid",
+        "issues": [
+          "missing name",
+          "missing description",
+          "missing thumbnailUrl",
+          "missing uploadDate",
+          "uploadDate not parseable by new Date()"
+        ],
+        "points": "affects validationRate"
+      },
+      {
+        "id": "schema.validator",
+        "condition": "node @type in: Dataset. Any issue makes the node invalid",
+        "issues": [
+          "missing name",
+          "missing description"
+        ],
+        "points": "affects validationRate"
+      }
+    ],
+    "status_mapping": "No JSON-LD -> fail. Else pass if validationRate == 100 and no parse errors; warning if validationRate >= 50; else fail. Status is independent of the numeric score (e.g. a parse error alone gives warning with 4).",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/structured-data/valid.mjs",
+    "source_procedure": "Collect JSON-LD per rendered page. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Look for literal <script type=\"application/ld+json\"> in templates and for code that emits it: Astro <script type=\"application/ld+json\" set:html={JSON.stringify(x)}>, Next.js <script type=\"application/ld+json\" dangerouslySetInnerHTML={{__html: JSON.stringify(x)}}> or libraries like next-seo/schema-dts, Hugo partials (schema.html, {{ jsonify }}), Eleventy JSON-LD includes, Vite SPA index.html. For literal blocks, JSON.parse after stripping template tags only if they are whole-value interpolations (replace with a placeholder string); for code-built objects, evaluate or statically reconstruct the object literal. If a build exists (dist/, public/ after hugo, out/, .next/server/app/*.html, _site/), prefer parsing built HTML. Then apply exactly: resolve @id refs (five properties only), collect every typed node recursively, validate with the listed rules, compute rate, score and status. Count one scripted block per rendered script element."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Full parity when JSON-LD is literal in templates or a build output is available. Partial when JSON-LD is assembled at runtime (SPA frameworks, tag managers, CMS plugins injecting JSON-LD), when values come from CMS/frontmatter (a missing headline or datePublished depends on per-post data), or when templates emit different blocks per page type. Template syntax inside literal blocks can make static JSON.parse fail where the rendered page parses fine, so template tags must be substituted before parsing, never counted as parse errors."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/structured-data.valid.md",
+  "fix_summary": "Fix JSON syntax and add missing required properties per validator (e.g. Organization.name, Article headline/author{name}/datePublished ISO date, Product name/image/description/offers{price,priceCurrency}, FAQPage Question/acceptedAnswer Answer text, BreadcrumbList position/name) in the JSON-LD source: layout templates, Astro/Next components, Hugo partials, Eleventy includes or index.html. Values drawn from existing page data; content like prices or answer text may need the user.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "schema.present",
+    "schema.json_syntax",
+    "schema.validation_rate",
+    "schema.valid.faqpage",
+    "schema.valid.howto",
+    "schema.valid.product",
+    "schema.valid.organization",
+    "schema.valid.article",
+    "schema.valid.person",
+    "schema.valid.breadcrumblist",
+    "schema.valid.itemlist",
+    "schema.valid.videoobject",
+    "schema.valid.dataset"
+  ],
+  "extension_source": "src/shared/checks/schema-validation-checker.js"
+}

@@ -1,0 +1,78 @@
+{
+  "id": "content.accessibility",
+  "extension_key": "accessibility",
+  "name": "Accessibility",
+  "category": "content",
+  "weight": 4,
+  "conditional": false,
+  "description": "Checks basic semantic structure: a <main> landmark, a <nav> landmark, labelled form inputs, and a minimum count of semantic elements. Semantic landmarks help AI parsers and agents locate the main content and navigation, and are a foundation for accessibility.",
+  "inputs": [
+    "rendered DOM body: semantic elements, ARIA roles/attributes, form inputs and labels, skip links"
+  ],
+  "scoring": {
+    "summary": "Start at 4. Deduct 1.75 if no <main> or [role=\"main\"]; 0.75 if no <nav> or [role=\"navigation\"]; 0.75 if fewer than 50% of visible form inputs are labelled (only when inputs exist); 0.75 if total semantic element count < 5 AND no main. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore). ARIA counts and skip link are informational only.",
+    "rules": [
+      {
+        "condition": "semantic element count = number of elements matching each of: main, nav, article, section, aside, header, footer, figure, figcaption (summed)",
+        "points": "n/a"
+      },
+      {
+        "condition": "no <main> element and no [role=\"main\"]",
+        "points": "-1.75"
+      },
+      {
+        "condition": "no <nav> element and no [role=\"navigation\"]",
+        "points": "-0.75"
+      },
+      {
+        "condition": "inputs = 'input:not([type=\"hidden\"]), textarea, select'; an input is labelled if it has an id with a matching label[for=id], or a non-empty aria-label, or a non-empty aria-labelledby, or is inside a <label>. If inputs exist and round(labelled/inputs*100) < 50",
+        "points": "-0.75"
+      },
+      {
+        "condition": "semanticCount < 5 AND no main (hasMain false)",
+        "points": "-0.75"
+      },
+      {
+        "condition": "ARIA counts ([role=main|navigation|banner|contentinfo|search|complementary], [aria-label], [aria-labelledby], [aria-describedby])",
+        "points": "0 (informational)"
+      },
+      {
+        "condition": "skip link: a[href^=\"#main\"], a[href^=\"#content\"], .skip-link, .skip-to-content",
+        "points": "0 (informational)"
+      },
+      {
+        "condition": "finalScore = max(0, round(score*10)/10); reported score = Math.floor(finalScore)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": "Using decimal finalScore: >= 3 pass, >= 2 warning, else fail. Reported points = floor. Reachable outcomes: 4 pass (no issues); 3.25 pass/3 (missing nav or poor labels); 2.5 warning/2 (nav + labels missing); 2.25 warning/2 (missing main only, >= 5 semantic elements); 1.5 fail/1 (missing main, <5 semantic, or main+nav); 0.75 fail/0; 0 fail/0.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/content/accessibility.mjs",
+    "source_procedure": "Evaluate the full page markup that composes each route: layout + page + components. Static HTML: each *.html. Astro: src/layouts/*.astro plus src/pages/** and imported src/components/**. Hugo: layouts/_default/baseof.html, single.html, list.html, partials/**. Eleventy: _includes/** layouts plus page templates. Next.js: app/**/layout.tsx + page.tsx and components (JSX tags <main>, <nav>, role=\"main\"); pages router: _app/_document + pages/**. Vite SPA: index.html is usually just <div id=\"app\">, so inspect root components (src/App.vue|tsx, router views). Count tags and role attributes, check form inputs for labels, then apply the deductions."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension counts elements in the live DOM after JavaScript, including third-party widgets (cookie banners, chat widgets with unlabeled inputs) that are not in the repo. Component frameworks may render <main>/<nav> from library components whose names do not reveal the tag. Conditionally rendered elements may be present or absent at runtime."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/content.accessibility.md",
+  "fix_summary": "Wrap the primary content in <main> and site navigation in <nav> in the base layout (Astro layout, Hugo baseof.html, Eleventy base layout, Next.js root layout.tsx, Vite App component); add <label for> or aria-label to form inputs. Adding main alone removes the largest deduction.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "a11y.landmark.main",
+    "a11y.landmark.nav",
+    "a11y.forms.labels",
+    "a11y.semantic.count",
+    "a11y.skip_link"
+  ],
+  "extension_source": "src/shared/checks/accessibility-checker.js"
+}

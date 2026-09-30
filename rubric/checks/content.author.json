@@ -1,0 +1,227 @@
+{
+  "id": "content.author",
+  "extension_key": "authorMeta",
+  "name": "Author Signals",
+  "category": "content",
+  "weight": 5,
+  "conditional": false,
+  "description": "Looks for author attribution (JSON-LD Person/Article.author, microdata, meta tags, byline text) plus E-E-A-T signals: expertise credentials, an author bio or author/about link, and site trust pages (about, contact, privacy, terms, address). AI answer engines weigh who wrote content and whether the site looks accountable when choosing sources to cite.",
+  "inputs": [
+    "rendered DOM: script[type=\"application/ld+json\"] blocks",
+    "rendered DOM: microdata [itemprop=\"author\"], [itemtype*=\"schema.org/Person\"], [itemprop=\"name\"]",
+    "page HTML <head>: meta[name=\"author\"], meta[property=\"article:author\"], meta[name=\"twitter:creator\"]",
+    "document.body.innerText (visible text; first 5000 chars used for credential scan)",
+    "element textContent of h2, h3, h4, h5, p, div, section, aside",
+    "anchor hrefs (trust and author links, social profile links)",
+    "address elements and [itemtype*=\"PostalAddress\"]"
+  ],
+  "scoring": {
+    "summary": "Four additive components capped at 5. Author attribution: +2 if an author name is resolved by any detector (priority JSON-LD, microdata, meta, text pattern), else +1 if an author marker exists without a usable name (meta[name=author] present but empty, or microdata author/Person present without name), else 0. Expertise: +1 if any of 41 expertise regexes matches the combined text (author bio text + schema author jobTitle/description/hasCredential/alumniOf/knowsAbout + first 5000 chars of body innerText). Authoritativeness: +1 if an author bio or author link is detected. Trustworthiness: +1 if at least 3 of 5 trust signals are present. Score is an integer 0-5.",
+    "rules": [
+      {
+        "id": "author.name",
+        "condition": "authorName resolved (see author_detection_order)",
+        "points": "+2"
+      },
+      {
+        "id": "author.marker_only",
+        "condition": "no authorName but hasAuthorMeta (meta[name=\"author\"] element exists, even with empty content) OR hasMicrodataAuthor (any [itemprop=\"author\"] or [itemtype*=\"schema.org/Person\"] element exists) OR hasSchemaAuthor",
+        "points": "+1",
+        "note": "hasSchemaAuthor is only set when a schema name was found, so it cannot reach this branch in practice."
+      },
+      {
+        "id": "author.none",
+        "condition": "none of the above",
+        "points": 0,
+        "issue": "No author attribution found"
+      },
+      {
+        "id": "eeat.expertise",
+        "condition": "any expertisePatterns regex matches combinedText",
+        "points": "+1",
+        "patterns": [
+          "/\\b(PhD|Ph\\.D|Ed\\.D|Sc\\.D|DPhil|D\\.Phil)\\b/i",
+          "/\\b(MD|M\\.D|DO|D\\.O|DDS|DMD|PharmD|DVM|JD|J\\.D)\\b/i",
+          "/\\b(MBA|MFA|MPH|MSW|MEd|M\\.Ed|LLM|LL\\.M)\\b/i",
+          "/\\b(MA|M\\.A|MS|M\\.S|MSc|M\\.Sc|MEng|M\\.Eng)\\b/i",
+          "/\\b(BA|B\\.A|BS|B\\.S|BSc|B\\.Sc|BEng|B\\.Eng)\\b/i",
+          "/\\b(Dr\\.|Prof\\.)(?=\\s|$)/i",
+          "/\\b(Professor|Lecturer|Researcher|Fellow)\\b/i",
+          "/\\b(Associate\\s+Professor|Assistant\\s+Professor|Adjunct\\s+Professor)\\b/i",
+          "/\\b(Founder|Co-?Founder|CEO|CTO|CFO|COO|CMO|CIO|CISO)\\b/i",
+          "/\\b(President|Vice\\s+President|VP|Director|Managing\\s+Director)\\b/i",
+          "/\\b(Senior|Lead|Principal|Staff|Chief|Head\\s+of)\\s+\\w+/i",
+          "/\\b(Editor|Editor-in-Chief|Managing\\s+Editor|Executive\\s+Editor)\\b/i",
+          "/\\b(Journalist|Reporter|Correspondent|Columnist|Analyst)\\b/i",
+          "/\\b(Author|Writer|Contributor)\\b/i",
+          "/\\b(AWS\\s+Certified|AWS\\s+Solutions\\s+Architect|AWS\\s+Developer)\\b/i",
+          "/\\b(Google\\s+Cloud|GCP\\s+Certified|Google\\s+Certified)\\b/i",
+          "/\\b(Azure\\s+Certified|Microsoft\\s+Certified|MCSE|MCSA|MCP)\\b/i",
+          "/\\b(Cisco\\s+Certified|CCNA|CCNP|CCIE)\\b/i",
+          "/\\b(CompTIA|A\\+|Network\\+|Security\\+|CASP)\\b/i",
+          "/\\b(CISSP|CISM|CISA|CEH|OSCP|GIAC|GSEC)\\b/i",
+          "/\\b(PMP|PMI|PRINCE2|Scrum\\s+Master|CSM|PSM|SAFe)\\b/i",
+          "/\\b(Six\\s+Sigma|Lean\\s+Six\\s+Sigma|Black\\s+Belt|Green\\s+Belt)\\b/i",
+          "/\\b(CPA|CFA|CFP|CMA|CIA|ACCA|FRM)\\b/i",
+          "/\\b(RN|NP|PA-C|APRN|LPN|CNA|Board-?Certified)\\b/i",
+          "/\\b(Esq\\.)(?=\\s|,|$)/i",
+          "/\\b(Attorney|Barrister|Solicitor|Bar\\s+Admitted)\\b/i",
+          "/\\b(Realtor|Licensed\\s+Agent|CLU|ChFC|CPCU)\\b/i",
+          "/\\b(Certified|Licensed|Registered|Accredited|Chartered)\\b/i",
+          "/\\b(Board-?Certified|State-?Licensed|Nationally\\s+Certified)\\b/i",
+          "/\\b(Expert|Specialist|Consultant|Advisor|Strategist)\\b/i",
+          "/\\b(Practitioner|Professional|Veteran|Authority)\\b/i",
+          "/\\b(\\d{1,2}\\+?\\s*years?\\s*(of\\s+)?experience)\\b/i",
+          "/\\b(decade[s]?\\s+of\\s+experience)\\b/i",
+          "/\\b(over\\s+\\d+\\s+years?)\\b/i",
+          "/\\b(more\\s+than\\s+\\d+\\s+years?)\\b/i",
+          "/\\b(Award-?winning|Prize-?winning|Best-?selling)\\b/i",
+          "/\\b(Published\\s+(in|author|writer)|Featured\\s+in)\\b/i",
+          "/\\b(Recognized\\s+by|Honored\\s+by|Recipient\\s+of)\\b/i",
+          "/\\b(Member\\s+of|Fellow\\s+of|Inducted\\s+into)\\b/i",
+          "/\\b(Peer-?reviewed|Published\\s+research|Research\\s+scientist)\\b/i",
+          "/\\b(Tenured|Faculty\\s+member|Department\\s+(head|chair))\\b/i"
+        ],
+        "combined_text": "join(\" \") of: authorBioText (if any); schemaAuthor.jobTitle; schemaAuthor.description; each hasCredential string or .name; each alumniOf string or .name; each knowsAbout as String(); then document.body.innerText.substring(0, 5000)"
+      },
+      {
+        "id": "eeat.authoritativeness",
+        "condition": "hasAuthorBio OR hasAuthorLink",
+        "points": "+1",
+        "hasAuthorBio": "true if any of: document has [itemprop=\"author\"]; document has [itemtype*=\"Person\"]; any element matches .author-bio, .about-author, [class*=\"author-bio\"] (selector strings containing author-bio, about-author, itemprop or itemtype); OR authorBioText was captured by author detection (see author_bio_text)",
+        "hasAuthorLink": "true if any element matches a[href*=\"/author/\"], a[href*=\"/about\"], a[href*=\"/contributor/\"], a[href*=\"/writer/\"] (attribute substring match on the raw href)",
+        "not_counted": "Selectors .author-box, [class*=\"author-box\"], .byline, .post-author, .article-author, .contributor, .writer-bio, [rel=\"author\"] set neither flag in detectAuthoritySignals; they only matter through the CSS fallback that can populate authorBioText."
+      },
+      {
+        "id": "eeat.trust",
+        "condition": "trustScore >= 3, where trustScore counts true values among: a[href*=\"/about\"], a[href*=\"/contact\"], a[href*=\"/privacy\"], a[href*=\"/terms\"], (address element OR [itemtype*=\"PostalAddress\"])",
+        "points": "+1"
+      },
+      {
+        "id": "cap",
+        "condition": "score = min(score, 5)",
+        "points": "cap"
+      },
+      {
+        "id": "reference.author_detection_order",
+        "condition": "author_detection_order",
+        "value": [
+          "P1 JSON-LD: for each script[type=\"application/ld+json\"], JSON.parse(textContent) (invalid JSON skipped). parseSchemaForAuthor recursively (depth > 5 stops): arrays -> first item with a name wins; node whose @type includes \"Person\" -> name = extractPersonName (name string trimmed, else givenName + \" \" + familyName); node whose @type is one of Article, BlogPosting, NewsArticle, WebPage, Review, HowTo, Recipe with an author property -> articleHasAuthor = true and name from author (string trimmed, first array element, or Person object name); then @graph items; then, if still no name, any nested object property (excluding @type, @context, @graph) is searched for a Person. So a Person nested anywhere (founder, employee, creator, publisher...) counts as the author. Later script blocks with a name overwrite earlier ones. A non-string name property yields null.",
+          "P2 microdata (only if no name yet): each [itemprop=\"author\"]: name = textContent of descendant [itemprop=\"name\"], else element textContent trimmed if 2-99 chars; bio text = textContent substring 0-2000 if length > 20. Then, if still no name, [itemtype*=\"schema.org/Person\"] elements with a descendant [itemprop=\"name\"].",
+          "P3 meta (always evaluated for hasAuthorMeta): meta[name=\"author\"] content trimmed; else meta[property=\"article:author\"] content; else meta[name=\"twitter:creator\"] content with leading @ stripped. Used only if no name yet.",
+          "P4 text patterns (if no name or no bio text): for each authorSectionPatterns regex that matches body innerText, find the FIRST element in document order among h2, h3, h4, h5, p, div, section, aside whose textContent matches; container = el.closest(\"section, article, aside, div\") (can be el itself) or parentElement; if container textContent length is 21-2999 chars it becomes authorBioText; name = capture group of nameFromContainer regex on container text. Stops at the first pattern that yields bio text.",
+          "P5 CSS fallback (only if no bio text): first element (in authoritySelectors order) whose trimmed textContent is 21-2999 chars becomes authorBioText."
+        ],
+        "points": "n/a"
+      },
+      {
+        "id": "reference.author_section_patterns",
+        "condition": "author_section_patterns",
+        "value": [
+          "/about\\s+the\\s+author/i",
+          "/meet\\s+the\\s+author/i",
+          "/author\\s*:/i",
+          "/written\\s+by/i",
+          "/article\\s+by/i",
+          "/posted\\s+by/i",
+          "/\\bby\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+/i",
+          "/contributor/i",
+          "/bio(?:graphy)?:/i",
+          "/about\\s+[A-Z][a-z]+/i"
+        ],
+        "points": "n/a"
+      },
+      {
+        "id": "reference.name_from_container_regex",
+        "condition": "name_from_container_regex",
+        "value": "/(?:[Bb]y|[Ww]ritten\\s+[Bb]y|[Aa]uthor:?)[ ]+([A-Z][a-z]+(?:[ ]+[A-Z][a-z]+){1,3})/",
+        "points": "n/a"
+      },
+      {
+        "id": "reference.authority_selectors",
+        "condition": "authority_selectors",
+        "value": [
+          "[itemprop=\"author\"]",
+          "[itemtype*=\"Person\"]",
+          "[rel=\"author\"]",
+          ".author-bio",
+          ".author-box",
+          ".about-author",
+          "[class*=\"author-bio\"]",
+          "[class*=\"author-box\"]",
+          ".byline",
+          ".post-author",
+          ".article-author",
+          ".contributor",
+          ".writer-bio",
+          "a[href*=\"/author/\"]",
+          "a[href*=\"/about\"]",
+          "a[href*=\"/contributor/\"]",
+          "a[href*=\"/writer/\"]"
+        ],
+        "points": "n/a"
+      },
+      {
+        "id": "reference.social_profile_patterns",
+        "condition": "social_profile_patterns",
+        "value": [
+          "twitter.com",
+          "linkedin.com",
+          "github.com",
+          "facebook.com"
+        ],
+        "points": "n/a"
+      },
+      {
+        "id": "reference.social_profile_note",
+        "condition": "social_profile_note",
+        "value": "hasSocialProfiles is computed (any a[href] whose resolved href contains one of these) but does NOT affect the score.",
+        "points": "n/a"
+      },
+      {
+        "id": "reference.experience_note",
+        "condition": "experience_note",
+        "value": "experiencePatterns (first-person \"in my experience\", \"I've found\", \"our team\", \"hands-on\", ...) are matched and reported but do NOT affect the score.",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": "score >= 4 -> pass; score >= 2 -> warning; else fail.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/content/author.mjs",
+    "source_procedure": "1. Pick the page templates to evaluate. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Evaluate the layout chain that renders a representative content page (blog post/article) and the home page; report per-page if they differ. 2. JSON-LD: collect <script type=\"application/ld+json\"> bodies from templates, plus JSON-LD built in code (Astro set:html={JSON.stringify(obj)}, Next.js <script dangerouslySetInnerHTML> or JSON-LD components, Hugo partials, Eleventy data). Apply parseSchemaForAuthor as described: any Person anywhere (depth <= 5) or an author on Article/BlogPosting/NewsArticle/WebPage/Review/HowTo/Recipe gives a name. If the name is a template variable (e.g. {{ .Params.author }}, {post.data.author}), resolve it from frontmatter/config/site data; if unresolvable, treat as name present but flag. 3. Microdata: grep templates for itemprop=\"author\" and itemtype containing schema.org/Person, and a nested itemprop=\"name\". 4. Meta: grep for <meta name=\"author\">, <meta property=\"article:author\">, <meta name=\"twitter:creator\"> in head templates; Next.js app router: metadata.authors / metadata.twitter.creator in layout/page exports (Next emits meta name=\"author\" from authors); Astro/Hugo/Eleventy SEO components/partials. 5. Trust links: grep all templates (header/footer/nav partials especially) for href values containing \"/about\", \"/contact\", \"/privacy\", \"/terms\" (substring, raw attribute), and for <address> or itemtype containing PostalAddress. Count distinct kinds; >= 3 earns the point. Also check nav data files (e.g. Hugo menus in config, Astro/Next nav arrays) since links are often data-driven. 6. Authority: +1 if trust scan found any href containing \"/about\", \"/author/\", \"/contributor/\" or \"/writer/\", or any class containing author-bio / about-author, or itemprop=\"author\" / itemtype containing Person, or a byline/author-box element with 21-2999 chars of text. 7. Expertise: run the 41 expertisePatterns against the concatenation of author bio text, schema Person jobTitle/description/hasCredential/alumniOf/knowsAbout, and the first ~5000 characters of the page visible text (approximate from the template plus the content file markdown, stripping tags). Note that very common words match (see open_questions), so on any page with meaningful English copy this is nearly always true. 8. Sum as in scoring.rules, cap at 5, map status.",
+    "llm_criteria": "Only the text-pattern name extraction (P4) and the expertise scan depend on rendered visible text. The model should: (a) decide whether visible body copy on a content page contains a byline or author section matching the authorSectionPatterns, and extract \"By First Last\" style names as the regex would (capitalized 2-4 word sequence after By / Written by / Author:, note the regex has no word boundary so \"Nearby Coffee Shop\" yields \"Coffee Shop\"); (b) decide whether the first ~5000 visible characters contain any expertise pattern term (degrees, titles like Founder/Director/Editor/Author/Writer, certifications, Certified/Licensed/Registered, Expert/Specialist/Consultant/Professional, \"N years of experience\", \"Member of\", \"Featured in\", etc.). Mirror the regexes, do not apply a stricter human judgement of genuine expertise."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Meta tags, JSON-LD, microdata and trust links in templates are reliably detectable from source. Divergence comes from: JSON-LD or meta injected client side (SPA, tag managers, Yoast-like plugins at runtime); template variables whose values live in CMS/frontmatter; the expertise scan and text-pattern detection run on rendered innerText (first 5000 chars, which includes nav/header text) that source can only approximate; href substring matching runs on raw attribute values after framework rendering (e.g. Next.js <Link href=\"/about\">, Hugo relURL output); navigation built from data files or fetched menus. The extension evaluates a single page; source audits must choose which templates represent it."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/content.author.md",
+  "fix_summary": "Add meta name=\"author\" and a JSON-LD Person (name, jobTitle, sameAs, worksFor) as author of an Article/BlogPosting in the head/layout (Astro layout, Hugo head partial, Next.js metadata.authors plus a JSON-LD script, Eleventy base layout, static index.html), add a visible byline/author bio block (class author-bio) and ensure header/footer link to /about, /contact, /privacy, /terms. Real author name, credentials and bio text must come from the user.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "author.name.schema",
+    "author.name.microdata",
+    "author.name.meta",
+    "author.name.byline",
+    "author.marker_only",
+    "eeat.expertise",
+    "eeat.authoritativeness.bio",
+    "eeat.authoritativeness.link",
+    "eeat.trust.about",
+    "eeat.trust.contact",
+    "eeat.trust.privacy",
+    "eeat.trust.terms",
+    "eeat.trust.address"
+  ],
+  "extension_source": "src/shared/checks/author-signals-checker.js"
+}

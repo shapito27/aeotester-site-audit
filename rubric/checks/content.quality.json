@@ -1,0 +1,201 @@
+{
+  "id": "content.quality",
+  "extension_key": "contentQuality",
+  "name": "Content Quality",
+  "category": "content",
+  "weight": 5,
+  "conditional": false,
+  "description": "Measures content depth of the page's main content area by word count against page-type-specific thresholds, plus paragraph structure. AI answer engines prefer substantive, well-structured pages they can quote and ground answers in; thin or empty pages (e.g. unhydrated SPAs) give them nothing to use.",
+  "inputs": [
+    "page URL pathname (page type detection)",
+    "document.title and first <h1> text (page type detection)",
+    "first script[type=application/ld+json] text (page type detection)",
+    "main content element text (rendered DOM, innerText)",
+    "all <p> elements in the document",
+    "counts of ul/ol, li, h1-h6 (informational)"
+  ],
+  "scoring": {
+    "summary": "Start at 5. Detect page type (URL, then title, then first JSON-LD block, else general) and select word-count thresholds. Extract main content text (first match of main, article, [role=main], .content, .main-content, #content, #main; else body), strip boilerplate, count words. Deduct 3 / 2 / 1 for very thin (< floor(min*0.33)) / thin (< floor(min*0.66)) / below minimum. Deduct 0.5 if fewer than 3 document-wide <p> with > 50 chars of text while wordCount > 200. If wordCount < 50, cap score at 1. finalScore = max(0, round to 1 decimal). Status from unfloored finalScore; reported score = Math.floor(finalScore).",
+    "rules": [
+      {
+        "step": "page type by URL pathname (lowercased), first match wins",
+        "condition": "contains '/contact' or '/kontakt' or '/contacto'",
+        "type": "contact"
+      },
+      {
+        "condition": "contains '/about' or '/about-us' or '/uber-uns'",
+        "type": "about"
+      },
+      {
+        "condition": "contains '/blog/' or '/article/' or '/post/' or '/news/'",
+        "type": "article"
+      },
+      {
+        "condition": "contains '/blog' and not '/blog/'",
+        "type": "blog"
+      },
+      {
+        "condition": "contains '/product/' or '/shop/' or '/item/'",
+        "type": "product"
+      },
+      {
+        "condition": "contains '/faq' or '/help' or '/support'",
+        "type": "faq"
+      },
+      {
+        "condition": "contains '/privacy' or '/terms' or '/legal' or '/policy'",
+        "type": "legal"
+      },
+      {
+        "condition": "pathname exactly '/', '/index', '/index.html' or '/home'",
+        "type": "homepage"
+      },
+      {
+        "step": "page type by document.title (lowercased)",
+        "condition": "contains 'contact' or 'kontakt'",
+        "type": "contact"
+      },
+      {
+        "condition": "title contains 'about' or 'über uns'",
+        "type": "about"
+      },
+      {
+        "condition": "title contains 'faq' or 'frequently asked'",
+        "type": "faq"
+      },
+      {
+        "step": "page type by schema",
+        "condition": "FIRST script[type=\"application/ld+json\"] textContent contains the literal substring '\"@type\":\"Article\"' or '\"@type\":\"BlogPosting\"' or '\"@type\":\"NewsArticle\"' (no whitespace allowed)",
+        "type": "article"
+      },
+      {
+        "condition": "FIRST ld+json block contains literal '\"@type\":\"Product\"'",
+        "type": "product"
+      },
+      {
+        "condition": "otherwise",
+        "type": "general"
+      },
+      {
+        "step": "thresholds {minimum, recommended, excellent}",
+        "values": {
+          "article": [
+            500,
+            800,
+            1500
+          ],
+          "blog": [
+            400,
+            600,
+            1200
+          ],
+          "product": [
+            150,
+            300,
+            600
+          ],
+          "homepage": [
+            150,
+            300,
+            500
+          ],
+          "about": [
+            200,
+            400,
+            800
+          ],
+          "contact": [
+            50,
+            100,
+            200
+          ],
+          "legal": [
+            300,
+            500,
+            1000
+          ],
+          "faq": [
+            300,
+            500,
+            1000
+          ],
+          "general": [
+            200,
+            300,
+            600
+          ]
+        }
+      },
+      {
+        "step": "main content",
+        "condition": "first element matching, in order: 'main', 'article', '[role=\"main\"]', '.content', '.main-content', '#content', '#main'; fallback document.body. Clone and remove: nav, header, footer, aside, .nav, .navigation, .menu, .sidebar, .header, .footer, .advertisement, .ad, script, style, noscript, iframe, [role=\"navigation\"], [role=\"banner\"], [role=\"contentinfo\"]. Text = innerText (or textContent) trimmed. Words = split on /\\s+/, non-empty."
+      },
+      {
+        "condition": "wordCount < floor(minimum * 0.33)",
+        "points": "-3",
+        "wordCountStatus": "very_thin"
+      },
+      {
+        "condition": "else wordCount < floor(minimum * 0.66)",
+        "points": "-2",
+        "wordCountStatus": "thin"
+      },
+      {
+        "condition": "else wordCount < minimum",
+        "points": "-1",
+        "wordCountStatus": "below_average"
+      },
+      {
+        "condition": "else wordCount >= excellent / >= recommended",
+        "points": "0",
+        "wordCountStatus": "comprehensive / good (informational)"
+      },
+      {
+        "condition": "count of ALL document <p> whose innerText.trim().length > 50 is < 3 AND wordCount > 200",
+        "points": "-0.5"
+      },
+      {
+        "condition": "wordCount < 50",
+        "effect": "score = min(score, 1)"
+      },
+      {
+        "step": "informational only (no score effect)",
+        "condition": "lists (ul, ol), li count, heading count (h1-h6), qualityIndicators {hasLists, hasMultipleHeadings >=3, hasSubstantialParagraphs >=3, hasGoodWordCount >=300}, hasGoodStructure (unused)"
+      },
+      {
+        "step": "final",
+        "condition": "finalScore = max(0, round(score*10)/10); reported score = floor(finalScore)"
+      }
+    ],
+    "status_mapping": "Based on unfloored finalScore: >= 4 pass, >= 2.5 warning, else fail. Reported score is Math.floor(finalScore), so e.g. 4.5 -> pass with score 4, 3.5 -> warning with 3, 2.5 -> warning with 2.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/content/quality.mjs",
+    "source_procedure": "Per page (for a site audit pick representative pages: homepage, one article/blog post, about, contact, product): 1) Derive the URL pathname from the file route (static HTML: path of *.html, index.html -> '/dir/'; Astro: src/pages/**; Hugo: content/** with permalinks in hugo.toml/config.toml; Eleventy: permalink front matter or input path; Next.js: app/**/page.tsx or pages/**; Vite SPA: index.html route '/' only). 2) Determine page type with the exact URL, title, first-JSON-LD substring rules. 3) Build the page's effective HTML: static HTML directly; for templates, combine the layout (src/layouts/*.astro, layouts/_default/*.html, _includes/**, app/**/layout.tsx) with the content (Markdown/MDX body renders inside main/article). 4) Find the first main-content selector, remove the boilerplate selector list, extract text, count whitespace-separated words (Markdown body word count is a good proxy when the layout wraps it in main/article). 5) Count <p> elements in the whole page with > 50 chars (Markdown paragraphs become <p>). 6) Apply deductions and cap. For Vite SPA with an empty index.html body the rendered-DOM value is unknown from source; count text in the components rendered into the route.",
+    "llm_criteria": "Only needed when content is produced by components or data (CMS, JSON, MDX components) that a script cannot flatten: estimate the visible word count of the main content (excluding nav, header, footer, aside, sidebar, ads) and the number of paragraphs longer than about 50 characters, then apply the same numeric thresholds. Do not judge prose quality; the extension does not."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension counts words from the rendered DOM using innerText, which excludes hidden (display:none) text and includes JS-rendered content; source counting may include hidden text and miss client-rendered or CMS-fetched content. Page type depends on the live URL (permalinks, trailing slashes, i18n prefixes) and document.title after templating. The paragraph count is document-wide including nav/footer <p>. Templates with variables or components make exact word counts approximate."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/content.quality.md",
+  "fix_summary": "Expand thin pages to at least the page-type minimum (e.g. 200 general, 500 article, 150 homepage/product) and break long text into 3+ real <p> paragraphs; wrap the primary content in <main> or <article> in the layout so boilerplate is excluded. The plugin can add the <main> wrapper automatically but the added content must be written or approved by the user.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "content.quality.page_type",
+    "content.quality.word_count",
+    "content.quality.paragraphs",
+    "content.quality.min_content",
+    "content.quality.main_landmark"
+  ],
+  "extension_source": "src/shared/checks/content-quality-checker.js"
+}

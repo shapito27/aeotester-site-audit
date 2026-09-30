@@ -1,0 +1,637 @@
+{
+  "source": "https://github.com/ai-robots-txt/ai.robots.txt (robots.json)",
+  "license": "MIT, Copyright (c) the ai.robots.txt contributors",
+  "copied_from": "AEOTester extension v1.3.1",
+  "bots": [
+    {
+      "name": "AddSearchBot",
+      "operator": "Unclear at this time.",
+      "function": "AI Search Crawlers"
+    },
+    {
+      "name": "AI2Bot",
+      "operator": "[Ai2](https://allenai.org/crawler)",
+      "function": "Content is used to train open language models."
+    },
+    {
+      "name": "AI2Bot-DeepResearchEval",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Ai2Bot-Dolma",
+      "operator": "[Ai2](https://allenai.org/crawler)",
+      "function": "Content is used to train open language models."
+    },
+    {
+      "name": "aiHitBot",
+      "operator": "[aiHit](https://www.aihitdata.com/about)",
+      "function": "A massive, artificial intelligence/machine learning, automated system."
+    },
+    {
+      "name": "amazon-kendra",
+      "operator": "Amazon",
+      "function": "Collects data for AI natural language search"
+    },
+    {
+      "name": "Amazonbot",
+      "operator": "Amazon",
+      "function": "Service improvement and enabling answers for Alexa users."
+    },
+    {
+      "name": "AmazonBuyForMe",
+      "operator": "[Amazon](https://amazon.com)",
+      "function": "AI Agents"
+    },
+    {
+      "name": "Andibot",
+      "operator": "[Andi](https://andisearch.com/)",
+      "function": "Search engine using generative AI, AI Search Assistant"
+    },
+    {
+      "name": "Anomura",
+      "operator": "[Direqt](https://direqt.ai)",
+      "function": "Collects data for AI search"
+    },
+    {
+      "name": "anthropic-ai",
+      "operator": "[Anthropic](https://www.anthropic.com)",
+      "function": "Scrapes data to train Anthropic's AI products."
+    },
+    {
+      "name": "Applebot",
+      "operator": "Unclear at this time.",
+      "function": "AI Search Crawlers"
+    },
+    {
+      "name": "Applebot-Extended",
+      "operator": "[Apple](https://support.apple.com/en-us/119829#datausage)",
+      "function": "Powers features in Siri, Spotlight, Safari, Apple Intelligence, and others."
+    },
+    {
+      "name": "atlassian-bot",
+      "operator": "[Atlassian](https://www.atlassian.com)",
+      "function": "AI search, assistants and agents"
+    },
+    {
+      "name": "Awario",
+      "operator": "Awario",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "bedrockbot",
+      "operator": "[Amazon](https://amazon.com)",
+      "function": "Data scraping for custom AI applications."
+    },
+    {
+      "name": "bigsur.ai",
+      "operator": "Big Sur AI that fetches website content to enable AI-powered web agents, sales assistants, and content marketing solutions for businesses",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Bravebot",
+      "operator": "https://safe.search.brave.com/help/brave-search-crawler",
+      "function": "Collects data for AI search"
+    },
+    {
+      "name": "Brightbot 1.0",
+      "operator": "https://brightdata.com/brightbot",
+      "function": "LLM/AI training."
+    },
+    {
+      "name": "BuddyBot",
+      "operator": "[BuddyBotLearning](https://www.buddybotlearning.com)",
+      "function": "AI Learning Companion"
+    },
+    {
+      "name": "Bytespider",
+      "operator": "ByteDance",
+      "function": "LLM training."
+    },
+    {
+      "name": "CCBot",
+      "operator": "[Common Crawl Foundation](https://commoncrawl.org)",
+      "function": "Provides open crawl dataset, used for many purposes, including Machine Learning/AI."
+    },
+    {
+      "name": "ChatGLM-Spider",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "ChatGPT Agent",
+      "operator": "[OpenAI](https://openai.com)",
+      "function": "AI Agents"
+    },
+    {
+      "name": "ChatGPT-User",
+      "operator": "[OpenAI](https://openai.com)",
+      "function": "Takes action based on user prompts."
+    },
+    {
+      "name": "Claude-SearchBot",
+      "operator": "[Anthropic](https://www.anthropic.com)",
+      "function": "Claude-SearchBot navigates the web to improve search result quality for users. It analyzes online content specifically to enhance the relevance and accuracy of search responses."
+    },
+    {
+      "name": "Claude-User",
+      "operator": "[Anthropic](https://www.anthropic.com)",
+      "function": "Claude-User supports Claude AI users. When individuals ask questions to Claude, it may access websites using a Claude-User agent."
+    },
+    {
+      "name": "Claude-Web",
+      "operator": "Anthropic",
+      "function": "Undocumented AI Agents"
+    },
+    {
+      "name": "ClaudeBot",
+      "operator": "[Anthropic](https://www.anthropic.com)",
+      "function": "Scrapes data to train Anthropic's AI products."
+    },
+    {
+      "name": "Cloudflare-AutoRAG",
+      "operator": "[Cloudflare](https://developers.cloudflare.com/autorag)",
+      "function": "Collects data for AI search"
+    },
+    {
+      "name": "CloudVertexBot",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "cohere-ai",
+      "operator": "[Cohere](https://cohere.com)",
+      "function": "Retrieves data to provide responses to user-initiated prompts."
+    },
+    {
+      "name": "cohere-training-data-crawler",
+      "operator": "Cohere to download training data for its LLMs (Large Language Models) that power its enterprise AI products",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "Cotoyogi",
+      "operator": "[ROIS](https://ds.rois.ac.jp/en_center8/en_crawler/)",
+      "function": "AI LLM Scraper."
+    },
+    {
+      "name": "Crawlspace",
+      "operator": "[Crawlspace](https://crawlspace.dev)",
+      "function": "Scrapes data"
+    },
+    {
+      "name": "Datenbank Crawler",
+      "operator": "Datenbank",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "DeepSeekBot",
+      "operator": "DeepSeek",
+      "function": "Training language models and improving AI products"
+    },
+    {
+      "name": "Devin",
+      "operator": "Devin AI",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Diffbot",
+      "operator": "[Diffbot](https://www.diffbot.com/)",
+      "function": "Aggregates structured web data for monitoring and AI model training."
+    },
+    {
+      "name": "DuckAssistBot",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Echobot Bot",
+      "operator": "Echobox",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "EchoboxBot",
+      "operator": "[Echobox](https://echobox.com)",
+      "function": "Data collection to support AI-powered products."
+    },
+    {
+      "name": "FacebookBot",
+      "operator": "Meta/Facebook",
+      "function": "Training language models"
+    },
+    {
+      "name": "facebookexternalhit",
+      "operator": "Meta/Facebook",
+      "function": "Ostensibly only for sharing, but likely used as an AI crawler as well"
+    },
+    {
+      "name": "Factset_spyderbot",
+      "operator": "[Factset](https://www.factset.com/ai)",
+      "function": "AI model training."
+    },
+    {
+      "name": "FirecrawlAgent",
+      "operator": "[Firecrawl](https://www.firecrawl.dev/)",
+      "function": "AI scraper and LLM training"
+    },
+    {
+      "name": "FriendlyCrawler",
+      "operator": "Unknown",
+      "function": "We are using the data from the crawler to build datasets for machine learning experiments."
+    },
+    {
+      "name": "Gemini-Deep-Research",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Google-CloudVertexBot",
+      "operator": "Google",
+      "function": "Build and manage AI models for businesses employing Vertex AI"
+    },
+    {
+      "name": "Google-Extended",
+      "operator": "Google",
+      "function": "LLM training."
+    },
+    {
+      "name": "Google-Firebase",
+      "operator": "Google",
+      "function": "Used as part of AI apps developed by users of Google's Firebase AI products."
+    },
+    {
+      "name": "Google-NotebookLM",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "GoogleAgent-Mariner",
+      "operator": "Google",
+      "function": "AI Agents"
+    },
+    {
+      "name": "GoogleOther",
+      "operator": "Google",
+      "function": "Scrapes data."
+    },
+    {
+      "name": "GoogleOther-Image",
+      "operator": "Google",
+      "function": "Scrapes data."
+    },
+    {
+      "name": "GoogleOther-Video",
+      "operator": "Google",
+      "function": "Scrapes data."
+    },
+    {
+      "name": "GPTBot",
+      "operator": "[OpenAI](https://openai.com)",
+      "function": "Scrapes data to train OpenAI's products."
+    },
+    {
+      "name": "iAskBot",
+      "operator": "Unclear at this time.",
+      "function": "Undocumented AI Agents"
+    },
+    {
+      "name": "iaskspider",
+      "operator": "Unclear at this time.",
+      "function": "Undocumented AI Agents"
+    },
+    {
+      "name": "iaskspider/2.0",
+      "operator": "iAsk",
+      "function": "Crawls sites to provide answers to user queries."
+    },
+    {
+      "name": "IbouBot",
+      "operator": "Ibou",
+      "function": "Search result generation."
+    },
+    {
+      "name": "ICC-Crawler",
+      "operator": "[NICT](https://nict.go.jp)",
+      "function": "Scrapes data to train and support AI technologies."
+    },
+    {
+      "name": "ImagesiftBot",
+      "operator": "[ImageSift](https://imagesift.com)",
+      "function": "ImageSiftBot is a web crawler that scrapes the internet for publicly available images to support their suite of web intelligence products"
+    },
+    {
+      "name": "imageSpider",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "img2dataset",
+      "operator": "[img2dataset](https://github.com/rom1504/img2dataset)",
+      "function": "Scrapes images for use in LLMs."
+    },
+    {
+      "name": "ISSCyberRiskCrawler",
+      "operator": "[ISS-Corporate](https://iss-cyber.com)",
+      "function": "Scrapes data to train machine learning models."
+    },
+    {
+      "name": "Kangaroo Bot",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "KlaviyoAIBot",
+      "operator": "[Klaviyo](https://www.klaviyo.com)",
+      "function": "AI Search Crawlers"
+    },
+    {
+      "name": "KunatoCrawler",
+      "operator": "Unclear at this time.",
+      "function": "Undocumented AI Agents"
+    },
+    {
+      "name": "laion-huggingface-processor",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "LAIONDownloader",
+      "operator": "[Large-scale Artificial Intelligence Open Network](https://laion.ai/)",
+      "function": "AI tools and models for machine learning research."
+    },
+    {
+      "name": "LCC",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "LinerBot",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Linguee Bot",
+      "operator": "[Linguee](https://www.linguee.com)",
+      "function": "AI powered translation service"
+    },
+    {
+      "name": "LinkupBot",
+      "operator": "Unclear at this time.",
+      "function": "AI Search Crawlers"
+    },
+    {
+      "name": "Manus-User",
+      "operator": "Unclear at this time.",
+      "function": "AI Agents"
+    },
+    {
+      "name": "meta-externalagent",
+      "operator": "[Meta](https://developers.facebook.com/docs/sharing/webmasters/web-crawlers)",
+      "function": "Used to train models and improve products."
+    },
+    {
+      "name": "Meta-ExternalAgent",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "meta-externalfetcher",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Meta-ExternalFetcher",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "meta-webindexer",
+      "operator": "[Meta](https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/)",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "MistralAI-User",
+      "operator": "Mistral",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "MistralAI-User/1.0",
+      "operator": "Mistral AI",
+      "function": "Takes action based on user prompts."
+    },
+    {
+      "name": "MyCentralAIScraperBot",
+      "operator": "Unclear at this time.",
+      "function": "AI data scraper"
+    },
+    {
+      "name": "netEstate Imprint Crawler",
+      "operator": "netEstate",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "NotebookLM",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "NovaAct",
+      "operator": "Unclear at this time.",
+      "function": "AI Agents"
+    },
+    {
+      "name": "OAI-SearchBot",
+      "operator": "[OpenAI](https://openai.com)",
+      "function": "Search result generation."
+    },
+    {
+      "name": "omgili",
+      "operator": "[Webz.io](https://webz.io/)",
+      "function": "Data is sold."
+    },
+    {
+      "name": "omgilibot",
+      "operator": "[Webz.io](https://webz.io/)",
+      "function": "Data is sold."
+    },
+    {
+      "name": "OpenAI",
+      "operator": "[OpenAI](https://openai.com)",
+      "function": "Unclear at this time."
+    },
+    {
+      "name": "Operator",
+      "operator": "Unclear at this time.",
+      "function": "AI Agents"
+    },
+    {
+      "name": "PanguBot",
+      "operator": "the Chinese company Huawei",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "Panscient",
+      "operator": "[Panscient](https://panscient.com)",
+      "function": "Data collection and analysis using machine learning and AI."
+    },
+    {
+      "name": "panscient.com",
+      "operator": "[Panscient](https://panscient.com)",
+      "function": "Data collection and analysis using machine learning and AI."
+    },
+    {
+      "name": "Perplexity-User",
+      "operator": "[Perplexity](https://www.perplexity.ai/)",
+      "function": "Used to answer queries at the request of users."
+    },
+    {
+      "name": "PerplexityBot",
+      "operator": "[Perplexity](https://www.perplexity.ai/)",
+      "function": "Search result generation."
+    },
+    {
+      "name": "PetalBot",
+      "operator": "[Huawei](https://huawei.com/)",
+      "function": "Used to provide recommendations in Hauwei assistant and AI search services."
+    },
+    {
+      "name": "PhindBot",
+      "operator": "[phind](https://www.phind.com/)",
+      "function": "AI-enhanced search engine."
+    },
+    {
+      "name": "Poggio-Citations",
+      "operator": "Unclear at this time.",
+      "function": "AI Assistants"
+    },
+    {
+      "name": "Poseidon Research Crawler",
+      "operator": "[Poseidon Research](https://www.poseidonresearch.com)",
+      "function": "AI research crawler"
+    },
+    {
+      "name": "QualifiedBot",
+      "operator": "[Qualified](https://www.qualified.com)",
+      "function": "Company offers AI agents and other related products; usage can be assumed to support said products."
+    },
+    {
+      "name": "QuillBot",
+      "operator": "[Quillbot](https://quillbot.com)",
+      "function": "Company offers AI detection, writing tools and other services."
+    },
+    {
+      "name": "quillbot.com",
+      "operator": "[Quillbot](https://quillbot.com)",
+      "function": "Company offers AI detection, writing tools and other services."
+    },
+    {
+      "name": "SBIntuitionsBot",
+      "operator": "[SB Intuitions](https://www.sbintuitions.co.jp/en/)",
+      "function": "Uses data gathered in AI development and information analysis."
+    },
+    {
+      "name": "Scrapy",
+      "operator": "[Zyte](https://www.zyte.com)",
+      "function": "Scrapes data for a variety of uses including training AI."
+    },
+    {
+      "name": "SemrushBot-OCOB",
+      "operator": "[Semrush](https://www.semrush.com/)",
+      "function": "Crawls your site for ContentShake AI tool."
+    },
+    {
+      "name": "SemrushBot-SWA",
+      "operator": "[Semrush](https://www.semrush.com/)",
+      "function": "Checks URLs on your site for SEO Writing Assistant."
+    },
+    {
+      "name": "ShapBot",
+      "operator": "[Parallel](https://parallel.ai)",
+      "function": "Collects data for Parallel's web APIs."
+    },
+    {
+      "name": "Sidetrade indexer bot",
+      "operator": "[Sidetrade](https://www.sidetrade.com)",
+      "function": "Extracts data for a variety of uses including training AI."
+    },
+    {
+      "name": "Spider",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "TerraCotta",
+      "operator": "[Ceramic AI](https://ceramic.ai/)",
+      "function": "AI Agents"
+    },
+    {
+      "name": "Thinkbot",
+      "operator": "[Thinkbot](https://www.thinkbot.agency)",
+      "function": "Insights on AI integration and automation."
+    },
+    {
+      "name": "TikTokSpider",
+      "operator": "ByteDance",
+      "function": "LLM training."
+    },
+    {
+      "name": "Timpibot",
+      "operator": "[Timpi](https://timpi.io)",
+      "function": "Scrapes data for use in training LLMs."
+    },
+    {
+      "name": "VelenPublicWebCrawler",
+      "operator": "[Velen Crawler](https://velen.io)",
+      "function": "Scrapes data for business data sets and machine learning models."
+    },
+    {
+      "name": "WARDBot",
+      "operator": "WEBSPARK",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "Webzio-Extended",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "webzio-extended",
+      "operator": "Unclear at this time.",
+      "function": "AI Data Scrapers"
+    },
+    {
+      "name": "wpbot",
+      "operator": "[QuantumCloud](https://www.quantumcloud.com)",
+      "function": "Live chat support and lead generation."
+    },
+    {
+      "name": "WRTNBot",
+      "operator": "Unclear at this time.",
+      "function": "Undocumented AI Agents"
+    },
+    {
+      "name": "YaK",
+      "operator": "[Meltwater](https://www.meltwater.com/en/suite/consumer-intelligence)",
+      "function": "According to the [Meltwater Consumer Intelligence page](https://www.meltwater.com/en/suite/consumer-intelligence) 'By applying AI, data science, and market research expertise to a live feed of global data sources, we transform unstructured data into actionable insights allowing better decision-making'."
+    },
+    {
+      "name": "YandexAdditional",
+      "operator": "[Yandex](https://yandex.ru)",
+      "function": "Scrapes/analyzes data for the YandexGPT LLM."
+    },
+    {
+      "name": "YandexAdditionalBot",
+      "operator": "[Yandex](https://yandex.ru)",
+      "function": "Scrapes/analyzes data for the YandexGPT LLM."
+    },
+    {
+      "name": "YouBot",
+      "operator": "[You](https://about.you.com/youchat/)",
+      "function": "Scrapes data for search engine and LLMs."
+    },
+    {
+      "name": "ZanistaBot",
+      "operator": "Unclear at this time.",
+      "function": "AI Search Crawlers"
+    }
+  ]
+}

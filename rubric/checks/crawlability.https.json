@@ -1,0 +1,62 @@
+{
+  "id": "crawlability.https",
+  "extension_key": "security",
+  "name": "SSL / HTTPS",
+  "category": "crawlability",
+  "weight": 2,
+  "conditional": false,
+  "description": "Checks that the page is served over HTTPS and flags mixed content (http: images, scripts, stylesheets, iframes). HTTPS is a basic trust signal for search and AI platforms, and mixed content can be blocked by browsers or agents.",
+  "inputs": [
+    "analyzed page URL protocol",
+    "rendered DOM: img[src], script[src], link[rel=\"stylesheet\"][href], iframe[src]"
+  ],
+  "scoring": {
+    "summary": "If the URL protocol is not https: fail, 0. Otherwise start at 2 and subtract 0.5 if any mixed content is found; reported score is Math.floor, so HTTPS with mixed content gives 1, clean HTTPS gives 2.",
+    "rules": [
+      {
+        "id": "security.https",
+        "condition": "new URL(url).protocol !== \"https:\" (falls back to window.location.protocol if URL parse throws)",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "id": "security.mixed_content",
+        "condition": "any element matches img[src^=\"http:\"], script[src^=\"http:\"], link[rel=\"stylesheet\"][href^=\"http:\"], iframe[src^=\"http:\"] (attribute value prefix, case-sensitive, exact rel value \"stylesheet\")",
+        "status": "warning",
+        "points": "-0.5 -> floor(1.5) = 1"
+      },
+      {
+        "condition": "HTTPS and no mixed content",
+        "status": "pass",
+        "points": 2
+      }
+    ],
+    "status_mapping": "not HTTPS -> fail; HTTPS with any mixed content -> warning; else pass.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/crawlability/https.mjs",
+    "source_procedure": "HTTPS: determine the production URL from config: astro.config.* site, hugo.toml/config.toml baseURL, Eleventy site data (_data/site.json url), Next.js metadataBase / NEXT_PUBLIC_SITE_URL / next-sitemap siteUrl, package.json homepage, CNAME file (GitHub Pages), canonical/og:url values in templates, vercel.json/netlify.toml/_headers/_redirects (HTTPS redirects, HSTS). If the canonical site URL starts with https:// treat as pass-candidate; http:// -> fail; unknown -> report as live-only for this sub-criterion (Vercel, Netlify, Cloudflare Pages and GitHub Pages serve HTTPS by default). Mixed content: grep templates, components and content (*.html, *.astro, *.tsx, *.jsx, *.vue, *.njk, *.liquid, Hugo layouts, markdown) for src=\"http: on img/script/iframe and href=\"http: on link rel=\"stylesheet\" (also JSX src={\"http:...\"} and markdown images ![](http://...), which render to img). Score: not HTTPS 0; HTTPS with any mixed content 1; else 2.",
+    "llm_criteria": "Model decides the production scheme when config is ambiguous (e.g. no site URL, custom domain on a known host) and whether an http: asset reference is actually rendered on the page (not in comments, docs code blocks or dead components)."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The protocol is a property of the deployment, not the repo; source can only infer it from config and host conventions. Mixed content from literal templates matches, but scripts/widgets injected at runtime, CMS content, and http: URLs built dynamically are not visible. Protocol-relative (//) or uppercase (HTTP:) URLs are not flagged by the extension either, so do not flag them."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/crawlability.https.md",
+  "fix_summary": "Rewrite http:// asset URLs in templates/content to https:// (auto-fixable when the asset is available over HTTPS) and set the site URL config to https (astro site, Hugo baseURL, Next metadataBase). Enabling HTTPS itself (certificate, forced redirect) is host config and report-only unless the host is file-configured (e.g. netlify.toml redirect, vercel defaults).",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "security.https",
+    "security.mixed_content"
+  ],
+  "extension_source": "src/shared/checks/security-checker.js"
+}

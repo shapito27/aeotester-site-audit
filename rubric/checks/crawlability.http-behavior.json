@@ -1,0 +1,94 @@
+{
+  "id": "crawlability.http-behavior",
+  "extension_key": "httpBehavior",
+  "name": "HTTP Behavior",
+  "category": "crawlability",
+  "weight": 3,
+  "conditional": false,
+  "description": "Probes a random non-existent URL to verify the site returns a real 404/410 (not a soft 404), verifies the current page returns HTTP 200 to a plain fetch, and checks that no X-Robots-Tag response header contains noindex or none. Agents rely on status codes and headers to know whether a fetch succeeded and whether content may be used.",
+  "inputs": [
+    "HTTP GET of a random probe URL: <origin>/aeo-checker-404-probe-<8 random base36 chars> (2500 ms timeout, redirects followed)",
+    "HTTP GET of the current page (shared AnalysisContext page response, 3000 ms timeout, redirects followed)",
+    "HTTP response header X-Robots-Tag of the current page"
+  ],
+  "scoring": {
+    "summary": "Three independent criteria, 1 point each. Probe: +1 if the final status is 404 or 410, or if the probe was inconclusive (status 0, 403, 429, 503, timeout, or any status >= 500); 0 if 200 (soft 404) or any other status (e.g. 401, 400). Page: +1 if the final status is 200 or the fetch was unreachable (0, 403, 429, 503, timeout); 0 otherwise (e.g. 404, 500, 502, 401). Header: +1 unless X-Robots-Tag matches /\\b(noindex|none)\\b/i. A noindex header forces status fail regardless of score.",
+    "rules": [
+      {
+        "condition": "probe final status is 404 or 410",
+        "points": "+1"
+      },
+      {
+        "condition": "probe inconclusive: status 0 (network/timeout), 403, 429, 503, timedOut, or status >= 500",
+        "points": "+1",
+        "note": "Benefit of the doubt"
+      },
+      {
+        "condition": "probe final status 200 (including a redirect of unknown URLs to the homepage or any 200 page)",
+        "points": "0",
+        "message": "Unknown URLs return HTTP 200 (soft 404), so agents cannot tell a missing page from a real one"
+      },
+      {
+        "condition": "probe any other status (e.g. 400, 401, 405, 451)",
+        "points": "0",
+        "message": "Unknown URLs return HTTP <status> instead of 404"
+      },
+      {
+        "condition": "page final status 200",
+        "points": "+1"
+      },
+      {
+        "condition": "page unreachable: status 0, 403, 429, 503, or timedOut",
+        "points": "+1",
+        "note": "Adds an informational issue 'likely bot protection' when status is not 200"
+      },
+      {
+        "condition": "page any other status (e.g. 404, 410, 500, 502, 401)",
+        "points": "0",
+        "message": "This page returns HTTP <status> to a plain fetch"
+      },
+      {
+        "condition": "page X-Robots-Tag header (case-insensitive name) present and matches /\\b(noindex|none)\\b/i",
+        "points": "0",
+        "status": "fail (forced)"
+      },
+      {
+        "condition": "X-Robots-Tag absent or without noindex/none",
+        "points": "+1"
+      },
+      {
+        "condition": "exception thrown anywhere (e.g. invalid URL)",
+        "status": "fail",
+        "points": 0
+      }
+    ],
+    "status_mapping": "If X-Robots-Tag blocks: fail (score can still be 2). Else score 3 pass, 2 warning, 0-1 fail.",
+    "inconclusive": "isUnreachable (status 0, 403, 429, 503 or timeout) on the probe or page still awards that criterion's point; the probe additionally treats any 5xx as inconclusive. No details.inconclusive flag is set and there is no half-weight warning; an unreachable site can score 3/3 pass."
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/crawlability/http-behavior.mjs",
+    "source_procedure": "Infer the host's behavior from repo config; mark as 'predicted' since the real answer needs a live server. 1) 404 handling: look for a custom 404 page and whether the host serves it with status 404: static/Vite: 404.html in public/ or output root (Netlify, Cloudflare Pages, GitHub Pages, Vercel static all serve 404.html with 404); Astro: src/pages/404.astro; Hugo: layouts/404.html; Eleventy: 404.html/404.md permalink; Next.js: app/not-found.tsx or pages/404.tsx (Next returns 404 by default). Then look for SPA catch-alls that turn unknown URLs into 200: Netlify/Cloudflare _redirects '/* /index.html 200', netlify.toml [[redirects]] from='/*' to='/index.html' status=200, vercel.json rewrites {source:'/(.*)', destination:'/index.html'}, Cloudflare Pages projects WITHOUT a 404.html (Pages then serves index.html as SPA fallback with 200), Firebase hosting rewrites '**', Next.js catch-all routes app/[...slug]/page.tsx that never call notFound(). Also catch-all redirects of unknown paths to '/' (301/302 to a 200 page = soft 404). 2) Page status: check the audited route exists as a page/file and is not redirected or behind auth (middleware.ts, _redirects, vercel.json redirects, netlify.toml redirects, basic-auth headers). 3) X-Robots-Tag: grep _headers (Netlify/Cloudflare Pages), netlify.toml [[headers]], vercel.json headers, next.config.js headers(), Next.js middleware setting X-Robots-Tag, Hugo/server configs (nginx.conf, .htaccess Header set X-Robots-Tag) for values matching /\\b(noindex|none)\\b/i on paths covering production pages. Note that Vercel adds 'X-Robots-Tag: noindex' automatically on preview deployments only, not production.",
+    "llm_criteria": "Judge from the repo's hosting target and framework defaults whether (a) a request for a random nonexistent path would return 404/410 or 200 (SPA fallback, catch-all rewrite, redirect to home), (b) the audited page returns 200, and (c) any header rule applying to production pages sets X-Robots-Tag containing noindex or none as a whole word. Award points exactly as the rules say. If the host cannot be identified, report the probe criterion as unknown rather than guessing."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "The extension observes live HTTP responses; the repo only lets us predict them. Host defaults (Cloudflare Pages SPA fallback when no 404.html exists, framework adapters, CDN or WAF rules, origin servers not in the repo), dashboard-configured headers/redirects, and edge middleware can all differ from what the source shows. The extension also awards points for WAF blocks and timeouts, which source analysis cannot reproduce."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/crawlability.http-behavior.md",
+  "fix_summary": "Add a real 404 page (public/404.html, src/pages/404.astro, layouts/404.html, app/not-found.tsx) and remove SPA catch-all 200 rewrites or redirect-to-home rules for unknown paths in _redirects, netlify.toml or vercel.json (or make the catch-all route call notFound()). Remove X-Robots-Tag noindex/none rules for production paths from _headers, netlify.toml [[headers]], vercel.json headers or next.config.js headers(). Host dashboard settings may still need manual changes.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "http.unknown_url.real_404",
+    "http.page.status_200",
+    "http.x_robots_tag.not_noindex"
+  ],
+  "extension_source": "src/shared/checks/http-behavior-checker.js"
+}

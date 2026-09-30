@@ -1,0 +1,90 @@
+{
+  "id": "ai-access.content-signals",
+  "extension_key": "contentSignals",
+  "name": "Content Signals",
+  "category": "ai-access",
+  "weight": 3,
+  "conditional": false,
+  "description": "Checks whether the site declares Content Signals (search, ai-input, ai-train = yes/no) in robots.txt or in a Content-Signal response header. robots.txt only says whether a crawler may fetch; Content Signals state what AI companies may do with the content (index it, ground answers on it, train on it).",
+  "inputs": [
+    "robots.txt (text and raw response)",
+    "HTTP response headers of the page (plain GET)",
+    "HTTP response headers of the page requested with Accept: text/markdown, text/html;q=0.9",
+    "AI bot list: keys of src/data/robots.json (ai-robots-txt project)"
+  ],
+  "scoring": {
+    "summary": "If robots.txt, the page and the Markdown-negotiated page were ALL unreachable -> warning 2 (inconclusive). Otherwise, parse Content-Signal lines in robots.txt and the content-signal header (page response first, else markdown response). If at least one recognised key=value pair is found in either -> pass 3. Else if robots.txt has a User-agent line naming any known AI bot -> warning 1. Else fail 0.",
+    "rules": [
+      {
+        "condition": "isUnreachable(robotsResponse) AND isUnreachable(pageResponse) AND isUnreachable(markdownResponse) (status 0/403/429/503 or timedOut; a null robots response counts as unreachable)",
+        "status": "warning",
+        "points": 2,
+        "inconclusive": true
+      },
+      {
+        "step": "robots.txt parsing",
+        "condition": "robots.txt text only when response.ok. Lines matching /^[ \\t]*content-signal[ \\t]*:[ \\t]*(.+)$/gim anywhere in the file (independent of User-agent groups). Later lines override earlier keys (Object.assign)."
+      },
+      {
+        "step": "value parsing",
+        "condition": "split on ','; each part split on '='; key trimmed/lowercased must be one of [search, ai-input, ai-train]; value trimmed/lowercased must be exactly 'yes' or 'no'. Other pairs ignored."
+      },
+      {
+        "step": "header",
+        "condition": "content-signal header (case-insensitive) from the plain page response; if absent, from the Accept: text/markdown response. Parsed with the same value parser."
+      },
+      {
+        "step": "combine",
+        "condition": "combined = {...headerSignals, ...robotsSignals} (robots wins on conflicts). source = both | robots | header when the respective parsed object is non-empty."
+      },
+      {
+        "condition": "at least one valid signal parsed from robots.txt or header",
+        "status": "pass",
+        "points": 3
+      },
+      {
+        "condition": "no valid signals, and robots.txt has a line matching /^[ \\t]*user-agent[ \\t]*:[ \\t]*<bot>[ \\t]*$/im (case-insensitive, exact bot name) for any bot in the AI bot list",
+        "status": "warning",
+        "points": 1
+      },
+      {
+        "condition": "otherwise (including no robots.txt / robots 404, or robots unreachable but page reachable)",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "exception thrown",
+        "status": "fail",
+        "points": 0
+      }
+    ],
+    "status_mapping": "Explicit per branch: pass=3, warning=1 (AI bots addressed, no signals), warning=2 (all three requests unreachable), fail=0.",
+    "inconclusive": "Only when all three requests (robots.txt, page GET, Markdown GET) are unreachable: warning, score 2 of 3, details.inconclusive true. If robots.txt alone is unreachable but the page responded without a header, the check proceeds and can fail with 0."
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/ai-access/content-signals.mjs",
+    "source_procedure": "1) Find robots.txt: static root/robots.txt; Astro public/robots.txt or src/pages/robots.txt.ts; Hugo static/robots.txt or layouts/robots.txt with enableRobotsTXT in hugo.toml/config.toml; Eleventy passthrough robots.txt or robots.njk with permalink; Next.js public/robots.txt or app/robots.ts (MetadataRoute.Robots has no Content-Signal field, so check for a static file or a route handler); Vite public/robots.txt. Also check framework plugins (e.g. astro-robots-txt config). 2) Apply the exact content-signal regex and value parser to the (rendered, if generated) robots.txt text. 3) Look for a Content-Signal header in host config: _headers (Cloudflare Pages/Netlify), netlify.toml [[headers]], vercel.json headers, Next.js next.config.* headers(), middleware.ts, server code. Parse with the same parser. 4) If none, test robots.txt for User-agent lines whose value exactly equals (case-insensitive) a key in the ai-robots-txt robots.json list. 5) Score.",
+    "llm_criteria": "Only for generated robots.txt or header code paths (template logic, env-dependent output): decide what literal robots.txt text and response headers production would emit, then apply the rules mechanically."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Hosts and CDNs can add robots.txt content or the Content-Signal header outside the repo (notably Cloudflare managed robots.txt, which injects Content-Signal lines, and Cloudflare Markdown for Agents which sets the header on markdown responses). Generated robots.txt may depend on env vars. The unreachable branch cannot be reproduced from source."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/ai-access.content-signals.md",
+  "fix_summary": "Add a line such as 'Content-Signal: search=yes, ai-input=yes, ai-train=no' to robots.txt (public/robots.txt for Astro/Next/Vite, static/robots.txt for Hugo, root or passthrough for static/Eleventy, or the generator for app/robots.ts and Hugo robots templates). The yes/no values are a policy choice, so the plugin should propose defaults and let the user confirm; optionally also add a Content-Signal header via _headers, netlify.toml or vercel.json.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "content.signals.robots",
+    "content.signals.header",
+    "content.signals.ai_bots_addressed"
+  ],
+  "extension_source": "src/shared/checks/content-signals-checker.js"
+}

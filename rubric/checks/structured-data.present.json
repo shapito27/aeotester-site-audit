@@ -1,0 +1,166 @@
+{
+  "id": "structured-data.present",
+  "extension_key": "structuredData",
+  "name": "Structured Data",
+  "category": "structured-data",
+  "weight": 15,
+  "conditional": false,
+  "description": "Detects JSON-LD (and, as a fallback, Microdata/RDFa) on the page and awards tiered points for schema.org types that AI answer engines use most (FAQPage above all, then HowTo/Product/Organization, then Article/VideoObject/Dataset, then BreadcrumbList/ItemList/Person). Machine-readable entities let AI systems extract facts and Q&A pairs without guessing from prose.",
+  "inputs": [
+    "rendered DOM: every <script type=\"application/ld+json\"> element (text content)",
+    "rendered DOM: [itemscope] elements and their itemtype attribute (Microdata)",
+    "rendered DOM: [typeof], [property], [vocab] elements (RDFa)"
+  ],
+  "scoring": {
+    "summary": "If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check fails with 0. If there is Microdata/RDFa but zero JSON-LD script tags, it is a fixed warning with 4 points. Otherwise (at least one JSON-LD script tag, even one that fails to parse) points are summed: base 4 if at least one block parses as JSON, FAQ 8 (valid) or 4 (only invalid), each Tier 1 type present 3 (valid) or 1 (only invalid), each Tier 2 type 2 or 0.5, each Tier 3 type 1 or 0. Total = min(15, Math.round(sum)). Validity comes from SchemaValidator.validate() per found entity; a type counts as valid when at least one of its entities validates. Entities are found by walking every parsed block recursively (all nested objects/arrays and @graph), after resolving pure {\"@id\"} references from @graph and top-level @id objects in the properties mainEntity, itemListElement, acceptedAnswer, author, publisher.",
+    "rules": [
+      {
+        "condition": "count(script[type=\"application/ld+json\"]) == 0 AND count([itemscope]) == 0 AND count([typeof]) == 0 AND count([vocab]) == 0",
+        "status": "fail",
+        "points": 0,
+        "message": "No structured data found"
+      },
+      {
+        "condition": "count(script[type=\"application/ld+json\"]) == 0 AND (Microdata found OR RDFa found)",
+        "status": "warning",
+        "points": 4,
+        "note": "Fixed 4 regardless of Microdata/RDFa types or validity. Microdata types = itemtype matched by /schema\\.org\\/(\\w+)/ (else raw itemtype). RDFa types = typeof split on whitespace. RDFa 'found' needs [typeof] or [vocab]; [property] alone (e.g. OpenGraph meta property=) does NOT count."
+      },
+      {
+        "condition": "JSON-LD present: parse each script textContent with JSON.parse; parse failures are kept as invalid blocks (they still make jsonldData.length > 0, so Microdata/RDFa fallback is skipped)",
+        "points": "n/a"
+      },
+      {
+        "condition": "base: at least one JSON-LD block parsed successfully",
+        "points": "+4"
+      },
+      {
+        "condition": "FAQ: any entity with @type 'FAQPage' (string or inside @type array); valid if SchemaValidator.validateFAQPage passes for at least one",
+        "points": "+8 valid / +4 only invalid / 0 absent"
+      },
+      {
+        "condition": "Tier 1 HowTo: @type 'HowTo'",
+        "points": "+3 valid / +1 only invalid"
+      },
+      {
+        "condition": "Tier 1 Product: @type 'Product'",
+        "points": "+3 valid / +1 only invalid"
+      },
+      {
+        "condition": "Tier 1 Organization: @type in ['Organization','LocalBusiness','Restaurant','Store','MedicalBusiness','LegalService','FinancialService','FoodEstablishment','HealthAndBeautyBusiness','HomeAndConstructionBusiness','EntertainmentBusiness','AutomotiveBusiness','Corporation','GovernmentOrganization','EducationalOrganization','MedicalOrganization','NGO','Airline']. Nested objects count too (e.g. Article.publisher of @type Organization).",
+        "points": "+3 valid / +1 only invalid"
+      },
+      {
+        "condition": "Tier 2 Article: @type in ['Article','BlogPosting','NewsArticle','TechArticle']",
+        "points": "+2 valid / +0.5 only invalid"
+      },
+      {
+        "condition": "Tier 2 VideoObject: @type 'VideoObject'",
+        "points": "+2 valid / +0.5 only invalid"
+      },
+      {
+        "condition": "Tier 2 Dataset: @type 'Dataset'",
+        "points": "+2 valid / +0.5 only invalid"
+      },
+      {
+        "condition": "Tier 3 BreadcrumbList: @type 'BreadcrumbList'",
+        "points": "+1 valid / 0 only invalid"
+      },
+      {
+        "condition": "Tier 3 ItemList: @type 'ItemList'",
+        "points": "+1 valid / 0 only invalid"
+      },
+      {
+        "condition": "Tier 3 Person: @type 'Person' (nested author objects count)",
+        "points": "+1 valid / 0 only invalid"
+      },
+      {
+        "condition": "any other @type (WebPage, WebSite, Question, Answer, ListItem, ImageObject, etc.)",
+        "points": 0,
+        "note": "Categorized as Other; contributes nothing. Matching is exact and case-sensitive on the @type string, so 'schema:FAQPage' or full IRIs do not match."
+      },
+      {
+        "condition": "total",
+        "points": "min(15, Math.round(base + faq + tier1 + tier2 + tier3))"
+      },
+      {
+        "condition": "validator FAQPage: mainEntity must be an array (else invalid). Each item: @type === 'Question', has name, has acceptedAnswer with @type === 'Answer' and non-empty text",
+        "points": "validity"
+      },
+      {
+        "condition": "validator HowTo: name required; step must be an array with length >= 2; each step @type === 'HowToStep' and has text or name. (HowToSection steps are invalid.)",
+        "points": "validity"
+      },
+      {
+        "condition": "validator Product: name, image, description required; offers required; each offer needs price or priceRange AND priceCurrency; if aggregateRating present it needs ratingValue",
+        "points": "validity"
+      },
+      {
+        "condition": "validator Organization (all subtypes): only name required (url/logo/sameAs/address/telephone/openingHours are warnings only)",
+        "points": "validity"
+      },
+      {
+        "condition": "validator Article types: headline required; author required (if first author is an object it needs name; a string author is only a warning); datePublished required and must parse with new Date()",
+        "points": "validity"
+      },
+      {
+        "condition": "validator Person: name required",
+        "points": "validity"
+      },
+      {
+        "condition": "validator BreadcrumbList: itemListElement must be an array; each item needs truthy position and name or item.name",
+        "points": "validity"
+      },
+      {
+        "condition": "validator ItemList: itemListElement must be an array (nothing else required)",
+        "points": "validity"
+      },
+      {
+        "condition": "validator VideoObject: name, description, thumbnailUrl, uploadDate (parseable by new Date()) required",
+        "points": "validity"
+      },
+      {
+        "condition": "validator Dataset: name and description required",
+        "points": "validity"
+      }
+    ],
+    "status_mapping": "JSON-LD path: score >= 12 pass, score >= 8 warning, else fail. No structured data: fail 0. Microdata/RDFa only: warning 4.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/structured-data/present.mjs",
+    "source_procedure": "1) Find every <script type=\"application/ld+json\"> in the source that ends up in the page's HTML: static HTML: *.html; Astro: src/layouts/*.astro, src/components/**, src/pages/** (inline <script type=\"application/ld+json\" set:html={JSON.stringify(obj)}> means the object literal in frontmatter must be evaluated or approximated); Hugo: layouts/** (partials like schema.html, head.html), plus Hugo internal templates ({{ template \"_internal/schema.html\" . }} emits <meta itemprop> tags without itemscope, which do not count, and no JSON-LD); Eleventy: _includes/**, src/**, JS data files; Next.js app router: app/**/page.tsx and layout.tsx rendering <script type=\"application/ld+json\" dangerouslySetInnerHTML={{__html: JSON.stringify(x)}}>; pages router: <Head> in pages/** and _document; Vite SPA: index.html. Prefer building the site (npm run build / hugo / eleventy) and scanning output HTML (dist/, public/, _site/, out/, .next/server/app/*.html) when possible, since that is exact. 2) Per page, JSON.parse each block; record parse failures. 3) If no JSON-LD, look for itemscope / typeof / vocab attributes. 4) Resolve @id references (mainEntity, itemListElement, acceptedAnswer, author, publisher) against @graph items and top-level @id objects, walk every object recursively, bucket by exact @type string, run the validator rules listed above, and sum points exactly as in rules. 5) Score per page template; report the representative page (home) plus worst key templates."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Exact when JSON-LD is literal in HTML or when the built output can be scanned. Differs when JSON-LD is assembled at runtime (client-side injection by GTM, Yoast/Rank Math style CMS plugins, React state), built from CMS data or template variables that cannot be resolved statically (validity of name/headline/datePublished then unknown), or injected per-route in SPAs. Extension evaluates one URL; source audit may cover many templates."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/structured-data.present.md",
+  "fix_summary": "Add a JSON-LD <script type=\"application/ld+json\"> block in the shared head/layout (Organization with name/url/logo/sameAs on every page; WebSite) and page-type blocks (Article/BlogPosting with headline, author {Person name}, datePublished; FAQPage only where visible Q&A exists; BreadcrumbList). Goes in index.html / Astro layout / Hugo partial / Eleventy _includes / Next.js layout.tsx or page.tsx. Skeletons can be generated automatically, but real names, FAQ content, prices and dates need user data.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "schema.jsonld.present",
+    "schema.jsonld.parses",
+    "schema.microdata_rdfa.fallback",
+    "schema.faq.present",
+    "schema.faq.valid",
+    "schema.howto.valid",
+    "schema.product.valid",
+    "schema.organization.valid",
+    "schema.article.valid",
+    "schema.videoobject.valid",
+    "schema.dataset.valid",
+    "schema.breadcrumblist.valid",
+    "schema.itemlist.valid",
+    "schema.person.valid"
+  ],
+  "extension_source": "src/shared/checks/structured-data-checker.js"
+}

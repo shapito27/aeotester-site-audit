@@ -1,0 +1,183 @@
+{
+  "id": "agent-readiness.protocols",
+  "extension_key": "agentProtocols",
+  "name": "Agent Protocol Discovery",
+  "category": "agent-readiness",
+  "weight": 6,
+  "conditional": true,
+  "description": "Checks whether the site publishes machine-readable discovery artifacts (MCP server card, A2A agent card, agent skills index, RFC 9727 API catalog, OpenAPI, OAuth metadata, /.well-known/ai) or declarative WebMCP tool annotations, so AI agents can find and use its tools and APIs without reading docs. Conditional: returns 'na' (removed from the score denominator) when the site shows no API or agent surface.",
+  "inputs": [
+    "HTTP GET of 11 well-known / discovery paths on the page origin (body, status, content-type)",
+    "rendered DOM: a[href] (first 500), link[rel~=service-desc|describedby], script[type=application/ld+json], elements with [toolname] or [tooldescription]",
+    "page URL (hostname for same-site comparison)"
+  ],
+  "scoring": {
+    "summary": "Probes 11 paths (concurrency 6, 1500 ms timeout each). A probe counts as found only if response.ok, the body is not HTML, and the path's validator passes on the parsed JSON. Found artifacts are grouped into categories (mcp, a2a, skills, api, oauth, ai) and WebMCP annotations add a 'webmcp' category. Score is by number of distinct categories: 3+ -> 6 pass, 2 -> 5 pass, 1 -> 3 warning. If none found: if every probe was unreachable -> na (inconclusive); else if the page shows same-site API evidence -> fail 0; else -> na (not applicable, excluded from denominator).",
+    "rules": [
+      {
+        "step": "probe",
+        "condition": "GET each path on origin with backgroundFetch(method GET, timeoutMs 1500), bounded concurrency 6. Order of ARTIFACTS list below."
+      },
+      {
+        "step": "classify",
+        "condition": "contentType = Content-Type header (case-insensitive). isHtml = /text\\/html|application\\/xhtml/i on content-type OR body matches /^\\s*<(!doctype|html)/i. If body non-empty and not HTML, JSON.parse(body); json = null on parse failure."
+      },
+      {
+        "step": "hit rule",
+        "condition": "artifact found only when probe.ok (2xx) AND NOT isHtml AND validator(json, probe) returns true (exceptions -> false)"
+      },
+      {
+        "artifact": "/.well-known/mcp/server-card.json",
+        "category": "mcp",
+        "label": "MCP server card",
+        "validator": "json is a non-array object"
+      },
+      {
+        "artifact": "/.well-known/mcp.json",
+        "category": "mcp",
+        "label": "MCP server card",
+        "validator": "json is a non-array object"
+      },
+      {
+        "artifact": "/.well-known/agent-card.json",
+        "category": "a2a",
+        "label": "A2A agent card",
+        "validator": "json is a non-array object with truthy 'name'"
+      },
+      {
+        "artifact": "/.well-known/agent.json",
+        "category": "a2a",
+        "label": "Agent card",
+        "validator": "json is a non-array object with truthy 'name'"
+      },
+      {
+        "artifact": "/.well-known/agent-skills/index.json",
+        "category": "skills",
+        "label": "Agent skills index",
+        "validator": "json is an object or an array"
+      },
+      {
+        "artifact": "/.well-known/api-catalog",
+        "category": "api",
+        "label": "API catalog (RFC 9727)",
+        "validator": "json is an object with truthy 'linkset' OR content-type matches /linkset/i"
+      },
+      {
+        "artifact": "/.well-known/openapi.json",
+        "category": "api",
+        "label": "OpenAPI document",
+        "validator": "json object with truthy 'openapi' or 'swagger'"
+      },
+      {
+        "artifact": "/openapi.json",
+        "category": "api",
+        "label": "OpenAPI document",
+        "validator": "json object with truthy 'openapi' or 'swagger'"
+      },
+      {
+        "artifact": "/.well-known/oauth-authorization-server",
+        "category": "oauth",
+        "label": "OAuth authorization server metadata",
+        "validator": "json object with truthy 'issuer'"
+      },
+      {
+        "artifact": "/.well-known/oauth-protected-resource",
+        "category": "oauth",
+        "label": "OAuth protected resource metadata (RFC 9728)",
+        "validator": "json object with truthy 'resource'"
+      },
+      {
+        "artifact": "/.well-known/ai",
+        "category": "ai",
+        "label": "AI metadata",
+        "validator": "not HTML and body.trim() non-empty (any text format, JSON not required)"
+      },
+      {
+        "step": "webmcp",
+        "condition": "document.querySelectorAll('[toolname], [tooldescription]').length > 0",
+        "effect": "adds category 'webmcp'"
+      },
+      {
+        "condition": "distinct categories >= 3",
+        "status": "pass",
+        "points": 6
+      },
+      {
+        "condition": "distinct categories == 2",
+        "status": "pass",
+        "points": 5
+      },
+      {
+        "condition": "distinct categories == 1",
+        "status": "warning",
+        "points": 3
+      },
+      {
+        "condition": "0 categories AND every probe isUnreachable (status 0, 403, 429, 503, or timedOut)",
+        "status": "na",
+        "applicable": false,
+        "points": 0,
+        "note": "details.inconclusive = true; checked BEFORE API evidence"
+      },
+      {
+        "condition": "0 categories AND at least one probe reached AND findApiEvidence() non-empty",
+        "status": "fail",
+        "points": 0
+      },
+      {
+        "condition": "0 categories AND at least one probe reached AND no API evidence",
+        "status": "na",
+        "applicable": false,
+        "points": 0
+      },
+      {
+        "step": "findApiEvidence",
+        "condition": "Scan first 500 a[href]; resolve against page URL; keep only same-site links (lowercase, strip leading 'www.' from both hosts; equal, or one endsWith '.'+other). Evidence if first path segment (lowercased) is one of [api, apis, developer, developers, docs, documentation, graphql, swagger, openapi, api-docs, api-reference] OR link hostname matches /^(api|apis|developers?|docs)\\./i. Collect up to 5 unique origin+pathname samples."
+      },
+      {
+        "step": "findApiEvidence (cont.)",
+        "condition": "Also evidence: any link[rel~=\"service-desc\"] or link[rel~=\"describedby\"]; any script[type=\"application/ld+json\"] whose text matches /\"@type\"\\s*:\\s*\"WebAPI\"/i"
+      },
+      {
+        "condition": "any exception thrown",
+        "status": "fail",
+        "points": 0
+      }
+    ],
+    "status_mapping": "Explicit per branch: 1 category -> warning (3); 2 -> pass (5); 3+ -> pass (6); none found + API evidence -> fail (0); none found + no evidence or all probes unreachable -> na with applicable:false (maxScore 6 removed from the 138 denominator by ScoringEngine).",
+    "inconclusive": "If no artifact is found and ALL 11 probes are unreachable (status 0/403/429/503 or timed out), returns status 'na', applicable false, details.inconclusive true, score 0 - so it is excluded from the denominator rather than half credit. If at least one probe was reached, unreachable individual probes are simply treated as not found."
+  },
+  "detect": {
+    "method": "hybrid",
+    "script": "checks/agent-readiness/protocols.mjs",
+    "source_procedure": "1) Locate the static/public root per stack: static HTML: repo root or build dir; Astro: public/; Hugo: static/; Eleventy: passthrough-copied dirs from .eleventy.js (addPassthroughCopy) or src/; Next.js: public/ plus app/.well-known/**/route.ts or pages/api; Vite SPA: public/. 2) For each of the 11 paths, check whether a file exists at <publicRoot><path> (also route handlers producing it, e.g. Next app/.well-known/api-catalog/route.ts, Astro src/pages/.well-known/*.json.ts, Hugo content/layouts outputs). 3) Parse the file and apply the exact validator (object, name, linkset, openapi/swagger, issuer, resource; /.well-known/ai any non-empty non-HTML text). For /.well-known/api-catalog (no extension) also check host config (_headers, netlify.toml, vercel.json headers) for Content-Type containing 'linkset' as an alternate pass. 4) Check host rewrite config (_redirects, vercel.json rewrites, netlify.toml) for SPA catch-all rewrites that would serve index.html for missing paths (those are HTML and never count). 5) Grep templates/layouts/components for attributes toolname= or tooldescription= (WebMCP). 6) Count distinct categories and score. 7) If zero: scan templates for same-site links whose first path segment is in the API list or whose host is api./apis./developer(s)./docs. subdomain of the site domain, for <link rel=service-desc|describedby>, and JSON-LD with @type WebAPI; also consider presence of an actual API in the repo (pages/api, app/api, openapi.yaml). Evidence -> fail 0; none -> na.",
+    "llm_criteria": "Judge only for the no-artifact case: does the site have a developer or API surface? Mirror the extension: same-site links to /api, /apis, /developer(s), /docs, /documentation, /graphql, /swagger, /openapi, /api-docs, /api-reference (first segment only) or to api./apis./developer(s)./docs. subdomains; a service-desc/describedby link; a WebAPI JSON-LD entity. Links to third-party APIs or anchor text alone do NOT count. The extension only inspects the analyzed page's links, so for parity evaluate the site's main layout/nav/footer plus the target page."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Artifacts can be served dynamically (edge functions, reverse proxies to an API host, framework route handlers) or set by the host, and Content-Type (relevant for api-catalog linkset and HTML detection) is decided by the server. API evidence in the extension is evaluated on the single rendered page, so links injected by JS or present only on other pages differ. WebMCP attributes added at runtime by JS are visible to the extension (rendered DOM) but may not be in source. The 'all probes unreachable' na branch cannot be reproduced from source."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/agent-readiness.protocols.md",
+  "fix_summary": "Publish discovery JSON under the public root (public/.well-known/ for Astro/Next/Vite, static/.well-known/ for Hugo, passthrough for Eleventy): e.g. /.well-known/api-catalog linkset (served with Content-Type application/linkset+json via _headers, netlify.toml or vercel.json headers), /.well-known/openapi.json, an MCP server card at /.well-known/mcp/server-card.json, and OAuth metadata if auth is used. Content (endpoints, auth servers, tool list) must come from the user, so the plugin drafts skeletons only; for content-only sites, no fix is needed (na).",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "agent.protocols.mcp",
+    "agent.protocols.a2a",
+    "agent.protocols.skills",
+    "agent.protocols.api_catalog",
+    "agent.protocols.openapi",
+    "agent.protocols.oauth",
+    "agent.protocols.ai_metadata",
+    "agent.protocols.webmcp",
+    "agent.protocols.api_evidence",
+    "agent.protocols.applicable"
+  ],
+  "extension_source": "src/shared/checks/agent-protocols-checker.js"
+}

@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+User-agent: ClaudeBot
+Disallow: /
+
+Sitemap: https://insightpins.example/sitemap.xml

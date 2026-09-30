@@ -1,0 +1,75 @@
+{
+  "id": "meta.language",
+  "extension_key": "languageTags",
+  "name": "Language Tags",
+  "category": "meta",
+  "weight": 3,
+  "conditional": false,
+  "description": "Checks that <html> has a lang attribute in the simple 'll' or 'll-RR' form using a recognised language (and region) code; hreflang and Content-Language meta are recorded. Language declaration helps LLMs and search engines interpret and route content to the right locale.",
+  "inputs": [
+    "page HTML: <html lang>",
+    "link[hreflang] elements",
+    "meta[http-equiv=\"Content-Language\"]"
+  ],
+  "scoring": {
+    "summary": "Start at 3. Missing or whitespace-only lang: -2. If present: must match /^([a-z]{2,3})(-([A-Z]{2}))?$/i else -0.5; if it matches but the language code is not in the built-in 70-code list, -0.5; else if a region is present and not in the built-in 70-region list, -0.25. hreflang and Content-Language are informational (issue text only, no points). finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "rules": [
+      {
+        "condition": "html lang attribute missing or trim() empty",
+        "points": "-2"
+      },
+      {
+        "condition": "lang.trim() does not match /^([a-z]{2,3})(-([A-Z]{2}))?$/i (e.g. 'zh-Hans', 'en_US', 'es-419', 'en-US-x-foo' fail)",
+        "points": "-0.5"
+      },
+      {
+        "condition": "language code (lowercased) not in: en es fr de it pt ru ja ko zh ar hi bn pa te mr ta ur gu kn nl pl uk ro el hu cs sv da fi no nb nn tr th vi id ms he fa sw tl fil ca eu gl sr hr bs sk sl bg mk sq et lv lt mt is ga cy af zu xh am ne si km lo my",
+        "points": "-0.5"
+      },
+      {
+        "condition": "else region present (uppercased) and not in: US GB CA AU NZ IE ZA IN PK NG ES MX AR CO PE VE CL EC GT CU FR BE CH LU MC DE AT IT PT BR RU UA BY KZ JP KR CN TW HK SG NL PL RO GR HU CZ SE DK FI NO TR TH VN ID MY PH IL AE SA EG KE GH MA DZ TN LY ET TZ UG ZW",
+        "points": "-0.25"
+      },
+      {
+        "condition": "more than 1 link[hreflang] and none has hreflang exactly 'x-default'",
+        "points": "0 (issue text only)"
+      },
+      {
+        "condition": "meta[http-equiv=\"Content-Language\"] content",
+        "points": "0 (informational)"
+      },
+      {
+        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "points": "n/a"
+      }
+    ],
+    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Reachable: valid lang => 3 pass; unknown region => 2.75 pass/2; bad format or unknown language => 2.5 pass/2; missing lang => 1 fail/1. Warning is unreachable.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/meta/language.mjs",
+    "source_procedure": "Find the root <html> tag per page. Static HTML / Vite: <html lang> in *.html / index.html. Astro: <html lang=...> in src/layouts/*.astro (may be a variable such as Astro.currentLocale). Hugo: layouts/_default/baseof.html, typically lang=\"{{ .Site.LanguageCode }}\" or {{ site.Language.LanguageCode }}; resolve from languageCode / defaultContentLanguage in hugo.toml/config.toml (Hugo languageCode like 'en-us' passes: regex is case-insensitive and region is uppercased). Eleventy: base layout in _includes/**, lang from _data/site.* or front matter. Next.js app router: <html lang> in app/layout.tsx (or app/[locale]/layout.tsx); pages router: <Html lang> in pages/_document.tsx, or i18n.defaultLocale in next.config.js (Next adds lang automatically when i18n is configured). Resolve the value and apply the rules; collect <link rel=alternate hreflang> for informational output."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Exact for literal lang values. Differs when lang is a template variable resolved at build/runtime, set by client-side i18n libraries after load, or added by a framework automatically (Next.js i18n). hreflang has no score impact so mismatches there do not matter."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/meta.language.md",
+  "fix_summary": "Set <html lang=\"en\"> (or the correct 'll' / 'll-RR' code such as en-US) in the root layout: index.html, Astro layout, Hugo baseof.html with languageCode in hugo.toml, Eleventy base layout, Next.js app/layout.tsx or pages/_document.tsx. Avoid script subtags like zh-Hans, which the extension penalizes.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "lang.html.present",
+    "lang.html.format",
+    "lang.html.known_code",
+    "lang.hreflang.x_default"
+  ],
+  "extension_source": "src/shared/checks/language-checker.js"
+}

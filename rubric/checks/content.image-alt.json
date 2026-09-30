@@ -1,0 +1,78 @@
+{
+  "id": "content.image-alt",
+  "extension_key": "imageAlt",
+  "name": "Image Alt Text",
+  "category": "content",
+  "weight": 5,
+  "conditional": false,
+  "description": "Measures the share of <img> elements with non-empty alt text. Alt text is how AI crawlers and agents understand image content (and is an accessibility baseline), so missing alt leaves images invisible to them.",
+  "inputs": [
+    "rendered DOM: every img element and its alt attribute"
+  ],
+  "scoring": {
+    "summary": "If there are no img elements: pass, 5. Otherwise percentage = round(100 * imagesWithAlt / totalImages), where an image counts only if alt exists and alt.trim() is non-empty. score = round(percentage / 100 * 5).",
+    "rules": [
+      {
+        "id": "images.none",
+        "condition": "document has 0 img elements",
+        "status": "pass",
+        "points": 5
+      },
+      {
+        "id": "images.alt_coverage",
+        "condition": "img counts as having alt iff getAttribute(\"alt\") !== null and alt.trim().length > 0 (alt=\"\" and whitespace-only count as MISSING)",
+        "points": "score = Math.round(Math.round(100*withAlt/total) / 100 * 5)"
+      },
+      {
+        "condition": "percentage 0-9",
+        "points": 0
+      },
+      {
+        "condition": "percentage 10-29",
+        "points": 1
+      },
+      {
+        "condition": "percentage 30-49",
+        "points": 2
+      },
+      {
+        "condition": "percentage 50-69",
+        "points": 3
+      },
+      {
+        "condition": "percentage 70-89",
+        "points": 4
+      },
+      {
+        "condition": "percentage 90-100",
+        "points": 5
+      }
+    ],
+    "status_mapping": "percentage < 60 -> fail; 60 <= percentage < 90 -> warning; >= 90 -> pass (no images -> pass). Note 50-59% scores 3 but is fail.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/content/image-alt.mjs",
+    "source_procedure": "Enumerate images that end up as <img> on the evaluated page. Static HTML: every *.html (prioritise index.html and article/blog templates). Astro: src/layouts/*.astro plus src/pages/** (and src/content/** frontmatter feeding them). Hugo: layouts/** (baseof.html, partials/head*, single.html), hugo.toml/config.toml params, content/** frontmatter. Eleventy: _includes/**, _layouts/**, src/**, .eleventy.js, _data/**. Next.js app router: app/**/layout.tsx and page.tsx (metadata exports, JSX); pages router: pages/_document.tsx, pages/_app.tsx, <Head> in pages/**. Vite SPA: index.html and src/** components. Count: literal <img> tags in HTML/templates/partials; Astro <Image>/<Picture> from astro:assets (render <img>, alt is required by the component); Next.js <Image> from next/image (renders <img>); Hugo images in layouts and markdown ![alt](src) rendered by Goldmark (markdown image alt becomes alt attribute; empty ![](x) gives alt=\"\"); Eleventy eleventy-img shortcodes; JSX <img> in React/Vue components; markdown/MDX content files for the page. For each, determine alt: literal non-empty string -> has alt; alt=\"\" or missing -> missing; alt bound to an expression (alt={post.title}, alt=\"{{ .Title }}\") -> treat as has alt unless the source value is clearly empty/undefined. Compute percentage and score per rules. Evaluate per page template (home plus a representative content page) and report per page; if a build output exists, parse built HTML instead."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Literal templates and built HTML give exact parity. Differences arise from images injected by JavaScript (carousels, lazy loaders, third-party widgets, tracking pixels), CMS content images, components that conditionally render images, and dynamic alt expressions that may evaluate to empty strings. The extension counts every img in the live DOM including tracking pixels and widget images the repo does not contain."
+  },
+  "fixable": "assisted",
+  "fix_recipe": "fix-recipes/content.image-alt.md",
+  "fix_summary": "Add descriptive alt attributes to each img in templates, components and markdown (e.g. ![Descriptive text](img.png), <Image alt=\"...\">). The plugin can draft alt text from filename/context but a human should confirm; note that marking decorative images alt=\"\" still counts as missing for this check.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "images.none",
+    "images.alt_coverage"
+  ],
+  "extension_source": "src/shared/checks/image-alt-checker.js"
+}

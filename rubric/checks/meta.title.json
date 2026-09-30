@@ -1,0 +1,126 @@
+{
+  "id": "meta.title",
+  "extension_key": "metaTitle",
+  "name": "Meta Title",
+  "category": "meta",
+  "weight": 5,
+  "conditional": false,
+  "description": "Checks that the page has a <title>, that it is 50-60 characters, that it is not a generic placeholder like 'Home', that it carries page context beyond a bare brand name, and that it is not stuffed with separators. The title is the primary label AI search and LLMs use to identify and cite a page.",
+  "inputs": [
+    "page HTML <head> <title> (document.title of the rendered page)"
+  ],
+  "scoring": {
+    "summary": "Start at 5. Empty/whitespace title returns fail 0 immediately. Otherwise subtract a length penalty (only one applies), 2 for a generic title, 0.5 for a short (<20 chars) title with no '-', '|' or ':', and 0.5 for more than 3 separator characters. finalScore = max(0, round to 1 decimal). Status uses finalScore; the reported score is Math.floor(finalScore).",
+    "rules": [
+      {
+        "condition": "document.title trimmed length == 0 (no <title> or empty)",
+        "status": "fail",
+        "points": 0,
+        "message": "No title tag found"
+      },
+      {
+        "condition": "start",
+        "points": 5
+      },
+      {
+        "condition": "trimmed length < 40",
+        "points": "-2",
+        "lengthStatus": "too_short"
+      },
+      {
+        "condition": "40 <= trimmed length < 50",
+        "points": "-0.5",
+        "lengthStatus": "short"
+      },
+      {
+        "condition": "trimmed length > 70",
+        "points": "-1.5",
+        "lengthStatus": "too_long"
+      },
+      {
+        "condition": "60 < trimmed length <= 70",
+        "points": "-0.5",
+        "lengthStatus": "long"
+      },
+      {
+        "condition": "50 <= trimmed length <= 60",
+        "points": "0",
+        "lengthStatus": "optimal"
+      },
+      {
+        "condition": "trimmed title matches (case-insensitive, whole string) one of: home, welcome, untitled, new page, page, document, index, test, website, my website, my blog, blog, site, my site, homepage",
+        "points": "-2",
+        "regexes": [
+          "/^home$/i",
+          "/^welcome$/i",
+          "/^untitled$/i",
+          "/^new page$/i",
+          "/^page$/i",
+          "/^document$/i",
+          "/^index$/i",
+          "/^test$/i",
+          "/^website$/i",
+          "/^my website$/i",
+          "/^my blog$/i",
+          "/^blog$/i",
+          "/^site$/i",
+          "/^my site$/i",
+          "/^homepage$/i"
+        ]
+      },
+      {
+        "condition": "trimmed length < 20 AND title contains none of '-', '|', ':' (brand-only)",
+        "points": "-0.5"
+      },
+      {
+        "condition": "count of characters matching /[-|:]/g in the title > 3 (every hyphen counts, including hyphens inside words)",
+        "points": "-0.5"
+      },
+      {
+        "condition": "finalScore",
+        "points": "max(0, Math.round(score*10)/10); reported score = Math.floor(finalScore)"
+      }
+    ],
+    "status_mapping": "Uses unfloored finalScore: >= 4 pass, >= 2.5 warning, else fail. Reported points are floored, so e.g. a 45-char title gets finalScore 4.5, status pass, score 4; a title < 20 chars with no separator gets 5-2-0.5 = 2.5, status warning, score 2.",
+    "inconclusive": null
+  },
+  "detect": {
+    "method": "script",
+    "script": "checks/meta/title.mjs",
+    "source_procedure": "Resolve the <title> each page will render. Static HTML: <title> in each *.html. Vite SPA: index.html <title> (note runtime document.title changes). Astro: <title> in src/layouts/*.astro, usually {title} from props; resolve the value passed from each src/pages/** file (frontmatter or Layout title=\"...\" prop), including any template like `${title} | Site`. Hugo: layouts/_default/baseof.html or partials/head.html <title>{{ .Title }} ...{{ .Site.Title }}</title>; resolve with content front matter title and hugo.toml/config.toml title. Eleventy: _includes/** layouts <title>{{ title }}</title> with front matter/data files. Next.js app router: export const metadata = { title } or generateMetadata in app/**/layout.tsx and page.tsx, including title.template ('%s | Brand') and title.default from the root layout; pages router: <title> inside next/head in pages/** or _app. Best: build and read output HTML. Then apply rules on the trimmed, whitespace-collapsed string (browser document.title collapses internal whitespace and decodes entities)."
+  },
+  "parity": {
+    "level": "partial",
+    "note": "Full when the title is a literal or resolvable from front matter/metadata exports. Differs when titles come from CMS data, i18n, runtime document.title updates in SPAs (react-helmet, vue-meta), or template composition that cannot be evaluated statically. Source audits every page, extension scores just the visited one."
+  },
+  "fixable": "auto",
+  "fix_recipe": "fix-recipes/meta.title.md",
+  "fix_summary": "Set a unique 50-60 character title per page in the form 'Page Topic | Brand' using the stack's mechanism (index.html <title>, Astro Layout title prop, Hugo front matter title plus baseof template, Eleventy front matter, Next.js metadata.title with title.template in the root layout). The plugin can fix templates (add a brand suffix, remove duplicate separators) automatically, but page-specific wording needs user review.",
+  "stacks": [
+    "static-html",
+    "astro",
+    "hugo",
+    "eleventy",
+    "vite-spa"
+  ],
+  "sub_ids": [
+    "meta.title.present",
+    "meta.title.length",
+    "meta.title.not_generic",
+    "meta.title.has_context",
+    "meta.title.separators"
+  ],
+  "extension_source": "src/shared/checks/meta-title-checker.js",
+  "divergences": [
+    {
+      "extension": "Every hyphen, pipe or colon counts as a separator, including hyphens inside words (\"step-by-step\").",
+      "plugin": "Only standalone separators count: \" - \", \" | \", \" : \", \": \", spaced en/em dashes and middle dots.",
+      "reason": "Hyphenated words are not separators; the extension penalized normal English."
+    },
+    {
+      "extension": "Status comes from the unrounded score (4.5 is pass) while the reported score is floored (4).",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    }
+  ]
+}

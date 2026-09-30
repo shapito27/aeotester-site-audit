@@ -9,7 +9,6 @@
     "extension_version": "1.3.1",
     "commit": "490932c"
   },
-  "max_score": 138,
   "scoring": {
     "check_status": "Each check returns pass | warning | fail | na and a score between 0 and its weight.",
     "conditional": "A check with conditional: true may return na (not applicable). Its weight is then removed from the denominator, so a plain content site is scored out of max_score minus that weight.",
@@ -72,6 +71,7 @@
       "detect": "content stored outside the repo (database-backed CMS)"
     }
   },
+  "max_score": 138,
   "categories": [
     {
       "id": "ai-access",
@@ -1258,7 +1258,19 @@
         "meta.title.has_context",
         "meta.title.separators"
       ],
-      "extension_source": "src/shared/checks/meta-title-checker.js"
+      "extension_source": "src/shared/checks/meta-title-checker.js",
+      "divergences": [
+        {
+          "extension": "Every hyphen, pipe or colon counts as a separator, including hyphens inside words (\"step-by-step\").",
+          "plugin": "Only standalone separators count: \" - \", \" | \", \" : \", \": \", spaced en/em dashes and middle dots.",
+          "reason": "Hyphenated words are not separators; the extension penalized normal English."
+        },
+        {
+          "extension": "Status comes from the unrounded score (4.5 is pass) while the reported score is floored (4).",
+          "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+          "reason": "Status and score must agree."
+        }
+      ]
     },
     {
       "id": "meta.description",
