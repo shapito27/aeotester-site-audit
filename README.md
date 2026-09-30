@@ -78,9 +78,9 @@ The audit reads your repo, not a live page. Most checks match what the extension
 
 ## What it runs and what it touches
 
-- **Runs:** the Node scripts in `skills/audit/scripts/` and `skills/fix/scripts/`, from the skills, with your approval as Claude Code asks for it. No hooks, no MCP servers, no package installs.
+- **Runs:** the Node scripts in `skills/audit/scripts/` and `skills/fix/scripts/`. The skills pre-approve only those exact scripts and `node --version`; any other command goes through Claude Code's normal permission prompt. No hooks, no MCP servers, no package installs.
 - **Reads:** files in the current repository only.
-- **Writes:** `aeotester-report.md` (audit), and the source files you approve in a diff (fix). If your site needs a build before the audit, it asks before running your build command.
+- **Writes:** `aeotester-report.md` (audit), and the source files you approve in a diff (fix). File edits are not pre-approved, so Claude Code also asks its usual permission for each one. If your site needs a build before the audit, it asks before running your build command.
 - **Network:** none. Nothing is sent to aeotester.com or anywhere else. No telemetry.
 - **Git:** never commits, pushes or changes branches.
 

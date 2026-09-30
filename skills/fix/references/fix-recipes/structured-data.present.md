@@ -74,4 +74,4 @@ Points: 4 for any parseable block, then per type (valid / invalid only): FAQPage
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only structured-data.present`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only structured-data.present`

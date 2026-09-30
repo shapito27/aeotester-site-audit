@@ -56,4 +56,4 @@ Content types: serve `api-catalog` as `application/linkset+json` via `_headers` 
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only agent-readiness.protocols`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only agent-readiness.protocols`

@@ -49,4 +49,4 @@ Full points (1 each): unknown URLs return a real 404/410, every page returns 200
 
 ## Verify
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs" --no-report --only crawlability.http-behavior`
+`node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs --no-report --only crawlability.http-behavior`
