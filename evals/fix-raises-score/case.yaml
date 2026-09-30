@@ -21,7 +21,16 @@ graders:
     name: audits-before-editing
     before: Bash
     after: Edit
+  - type: regex
+    name: diffs-shown
+    target: trace
+    pattern: "```diff"
+  - type: tool_used
+    name: no-git-writes
+    tool: Bash
+    input_match: "git (commit|add|push|stash|checkout|reset)"
+    min: 0
+    max: 0
   - type: llm
-    name: diff-and-score-change
-    focus: trace
-    criteria: Before the first Edit or Write, the agent showed the planned changes as diffs. It did not run git commit or any git command that changes state. It re-ran the audit after editing and reported the score before and after, with the after score higher. It did not invent facts such as people, credentials or prices.
+    name: score-went-up
+    criteria: The reply reports the AEO score before and after the fixes (as numbers out of the same total), the after score is higher, it lists what was fixed and what was skipped, and it says nothing was committed.
