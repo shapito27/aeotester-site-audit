@@ -1,0 +1,27 @@
+schema_version: "1.0"
+name: fix-raises-score
+description: /aeotester:fix --yes shows diffs, applies auto fixes to a static site, and the re-audit score goes up
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: "/aeotester:fix --yes"
+  max_turns: 60
+  timeout_seconds: 1200
+  allowed_tools: [Read, Glob, Grep, Edit, Write, Skill, "Bash(node:*)"]
+runs: 1
+graders:
+  - type: file_exists
+    name: llms-txt-created
+    path: llms.txt
+  - type: tool_used
+    name: edited-files
+    tool: Edit
+    min: 1
+  - type: tool_order
+    name: audits-before-editing
+    before: Bash
+    after: Edit
+  - type: llm
+    name: diff-and-score-change
+    focus: trace
+    criteria: Before the first Edit or Write, the agent showed the planned changes as diffs. It did not run git commit or any git command that changes state. It re-ran the audit after editing and reported the score before and after, with the after score higher. It did not invent facts such as people, credentials or prices.

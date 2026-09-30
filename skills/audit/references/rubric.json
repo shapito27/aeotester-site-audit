@@ -155,7 +155,11 @@
           },
           {
             "condition": "base score",
-            "points": "Math.round((allowedCount / totalBots) * 12)"
+            "points": "Math.round(9 * majorAllowed / 10 + 3 * otherAllowed / 116), where the 10 major bots are listed in references/ai-bots.json (major_bots)"
+          },
+          {
+            "condition": "any major bot blocked",
+            "points": "score capped at 9 (warning)"
           },
           {
             "condition": "one or more allowed bots have crawl-delay > 5",

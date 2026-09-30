@@ -1,0 +1,20 @@
+schema_version: "1.0"
+name: audit-sample-site
+description: /aeotester:audit on a static site writes a scored report and summarizes it
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: /aeotester:audit
+  max_turns: 10
+  allowed_tools: [Read, Glob, Grep, Skill, "Bash(node:*)"]
+runs: 1
+graders:
+  - type: file_exists
+    name: report-written
+    path: aeotester-report.md
+  - type: regex
+    name: score-in-summary
+    pattern: "\\d+\\s*/\\s*132"
+  - type: llm
+    name: useful-summary
+    criteria: The reply gives the score out of 132 with a percentage or grade, names the biggest point losses (such as structured data and llms.txt) marked auto-fix or assisted, and points to /aeotester:fix as the next step. It does not paste the whole report.
