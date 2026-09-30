@@ -1,6 +1,6 @@
 # AEOTester Site Audit
 
-Audit and auto-fix your website for AI search (AEO) and broken links - right inside Claude Code. 26 checks, 138 points: schema markup, llms.txt, AI crawler rules.
+Audit and auto-fix your website for AI search (AEO) - right inside Claude Code. 26 checks, 138 points: schema markup, llms.txt, AI crawler rules.
 
 > Status: early development (v0.1 scaffold). The commands exist but do not do anything useful yet.
 
@@ -24,7 +24,6 @@ Or from inside a Claude Code session:
 |---|---|
 | `/aeotester:audit` | Runs the 138-point AEO checklist on your site source and writes `aeotester-report.md` |
 | `/aeotester:fix` | Applies fixes in your repo (schema, llms.txt, headings, robots.txt, meta). Always shows a diff and asks first |
-| `/aeotester:links` | Finds broken links, maps each one to the source file, then replaces, removes or adds a redirect rule |
 
 ## Local development
 
@@ -37,7 +36,7 @@ Inside a session, `/reload-plugins` picks up edits.
 
 ## Privacy
 
-No network calls except the link checker's requests to URLs found in your site. Nothing is sent to aeotester.com. See [SECURITY.md](SECURITY.md).
+No network calls. Nothing is sent to aeotester.com or anywhere else. See [SECURITY.md](SECURITY.md).
 
 ## License
 

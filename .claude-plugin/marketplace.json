@@ -5,13 +5,13 @@
     "url": "https://aeotester.com"
   },
   "metadata": {
-    "description": "AEOTester plugins for Claude Code: AEO site audit, auto-fix and broken link repair."
+    "description": "AEOTester plugins for Claude Code: AEO site audit and auto-fix."
   },
   "plugins": [
     {
       "name": "aeotester",
       "source": "./",
-      "description": "AEO site audit and auto-fix: 138-point AI search checklist, schema markup, llms.txt, AI crawler rules, and broken link repair - applied directly in your codebase."
+      "description": "AEO site audit and auto-fix: 138-point AI search checklist, schema markup, llms.txt and AI crawler rules - applied directly in your codebase."
     }
   ]
 }

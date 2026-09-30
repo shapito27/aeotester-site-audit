@@ -125,7 +125,7 @@
         "src/data/robots.json (bundled AI bot list, 126 keys)"
       ],
       "scoring": {
-        "summary": "Site check evaluated at path '/'. robots.txt absent from the served root gives 8/12 (all bots allowed by default). A generated robots.txt that cannot be read gives 8/12 with inconclusive. An empty (whitespace-only) robots.txt gives 12/12. Otherwise every bot name in references/ai-bots.json (126) is evaluated with lib/robots.mjs canCrawl(parsed, bot, '/'); score = round(allowedCount / totalBots * 12), minus 2 (floor 0) if any allowed bot's own effective Crawl-delay > 5. All bots weigh equally.",
+        "summary": "Site check at path /. No robots.txt: 8/12 (inconclusive when it is generated at build time). Empty robots.txt: 12. Otherwise each bot in references/ai-bots.json is tested with the RFC 9309 parser. The 10 major bots share 9 points and the other 116 share 3; blocking any major bot caps the score at 9; any allowed bot with Crawl-delay over 5s costs 2. Status follows the shared 80% / 50% rule.",
         "rules": [
           {
             "condition": "no robots.txt in the served root and no robots.txt generator",
@@ -245,6 +245,11 @@
           "extension": "Evaluates the current page's URL path; robots.txt fetched live (403/503 treated as missing).",
           "plugin": "Site check at '/', robots.txt read from the served root; a generated robots.txt is inconclusive instead of absent.",
           "reason": "Source vs live: the repo has no request path, and a generator's output cannot be read without building."
+        },
+        {
+          "extension": "All 126 bots count equally: score = round(allowed / 126 * 12), so blocking GPTBot and ClaudeBot still scores 12/12.",
+          "plugin": "Ten major AI search and assistant crawlers (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, Google-Extended, Applebot-Extended) share 9 points and the other 116 share 3: score = round(9 * majorAllowed / 10 + 3 * otherAllowed / 116). Blocking any major bot caps the score at 9 (a warning). The list lives in references/ai-bots.json (major_bots).",
+          "reason": "Blocking the crawlers behind ChatGPT, Claude, Perplexity, Gemini and Apple Intelligence is what actually removes a site from AI answers; an obscure scraper should not weigh the same."
         }
       ]
     },

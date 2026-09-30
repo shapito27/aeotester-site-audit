@@ -11,8 +11,15 @@ import { parseRobots, canCrawl, groupsFor } from '../../lib/robots.mjs'
 import { robotsGenerator } from '../../lib/sources.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const BOTS = JSON.parse(readFileSync(join(here, '..', '..', '..', 'references', 'ai-bots.json'), 'utf8')).bots.map(b => b.name)
+const BOT_LIST = JSON.parse(readFileSync(join(here, '..', '..', '..', 'references', 'ai-bots.json'), 'utf8'))
+const BOTS = BOT_LIST.bots.map(b => b.name)
+// Divergence from the extension: the major AI search and assistant crawlers
+// carry most of the weight, so blocking GPTBot matters more than blocking an
+// obscure scraper. The rest of the list shares what is left.
+const MAJOR = new Set(BOT_LIST.major_bots.names)
+const MAJOR_POINTS = BOT_LIST.major_bots.points
 const WEIGHT = 12
+const MAJOR_BLOCKED_CAP = 9
 const ABSENT_SCORE = 8
 const MAX_DELAY = 5
 
@@ -79,7 +86,13 @@ export default {
 
     const total = BOTS.length
     const allowedCount = total - blockedBots.length
-    let score = Math.round((allowedCount / total) * WEIGHT)
+    const majorTotal = BOTS.filter(b => MAJOR.has(b)).length
+    const majorBlocked = blockedBots.filter(b => MAJOR.has(b))
+    const otherTotal = total - majorTotal
+    const otherAllowed = otherTotal - (blockedBots.length - majorBlocked.length)
+    let score = Math.round(MAJOR_POINTS * (majorTotal - majorBlocked.length) / majorTotal + (WEIGHT - MAJOR_POINTS) * otherAllowed / otherTotal)
+    // Any blocked major bot keeps the check below a pass (9/12 is a warning)
+    if (majorBlocked.length) score = Math.min(score, MAJOR_BLOCKED_CAP)
     if (delayWarnings.length) score = Math.max(0, score - 2)
 
     const findings = []
@@ -97,7 +110,7 @@ export default {
 
     return {
       score,
-      message: `${allowedCount}/${total} AI bots can access ${path}${delayWarnings.length ? ` (${delayWarnings.length} with crawl-delay > ${MAX_DELAY}s)` : ''}`,
+      message: `${allowedCount}/${total} AI bots can access ${path}${majorBlocked.length ? `, including blocked major bots: ${majorBlocked.join(', ')}` : ''}${delayWarnings.length ? ` (${delayWarnings.length} with crawl-delay > ${MAX_DELAY}s)` : ''}`,
       findings,
       recommendation: recs.length ? recs.join('; ') + '.' : '',
       details: {
@@ -109,6 +122,8 @@ export default {
         blockedCount: blockedBots.length,
         allowedPercentage: Math.round((allowedCount / total) * 100),
         blockedBots,
+        majorBots: [...MAJOR],
+        majorBlocked,
         delayWarnings,
         hasExcessiveDelays: delayWarnings.length > 0
       }

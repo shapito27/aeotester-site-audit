@@ -2,6 +2,22 @@
   "source": "https://github.com/ai-robots-txt/ai.robots.txt (robots.json)",
   "license": "MIT, Copyright (c) the ai.robots.txt contributors",
   "copied_from": "AEOTester extension v1.3.1",
+  "major_bots": {
+    "points": 9,
+    "note": "Crawlers behind the largest AI search and assistant products. They share 9 of the 12 points; every other bot in the list shares the remaining 3. Divergence from extension v1.3.1, which weights all bots equally.",
+    "names": [
+      "GPTBot",
+      "OAI-SearchBot",
+      "ChatGPT-User",
+      "ClaudeBot",
+      "Claude-SearchBot",
+      "Claude-User",
+      "PerplexityBot",
+      "Perplexity-User",
+      "Google-Extended",
+      "Applebot-Extended"
+    ]
+  },
   "bots": [
     {
       "name": "AddSearchBot",

@@ -10,7 +10,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - WordPress and other database-backed CMSs get a fix list instead of a score, and nothing is edited.
 - Rubric v1.1.0: fixes bugs found in the extension's checks (robots.txt grouping and precedence, status vs score mismatches, false positives) and records every difference from the extension in a `divergences` list per check.
 - `rubric.json`: 26 checks, 138 points, extracted from the AEOTester extension v1.3.1, with per-check scoring rules, source-file detection steps, parity notes and fix class. Plus `rubric.schema.json`, `scripts/validate-rubric.mjs` and `docs/rubric-review.md`.
-- Plugin scaffold: `plugin.json`, `marketplace.json`, and stub skills for `/aeotester:audit`, `/aeotester:fix` and `/aeotester:links`.
-- `link-fixer` agent stub.
+- Plugin scaffold: `plugin.json`, `marketplace.json`, and skills for `/aeotester:audit` and `/aeotester:fix`.
 - MIT license for code, CC BY 4.0 for the rubric.
 - CI: `claude plugin validate --strict` and a no-em-dash check.

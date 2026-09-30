@@ -2,7 +2,7 @@
   "name": "aeotester",
   "displayName": "AEOTester Site Audit",
   "version": "0.1.0",
-  "description": "Audit and auto-fix your site for AI search visibility and broken links. 138-point AEO checklist with fixes applied in your repo.",
+  "description": "Audit and auto-fix your site for AI search visibility. 138-point AEO checklist with fixes applied in your repo.",
   "author": {
     "name": "Ruslan Saifullin",
     "url": "https://x.com/ruslan_dev_ai"
@@ -10,5 +10,5 @@
   "homepage": "https://aeotester.com",
   "repository": "https://github.com/shapito27/aeotester-site-audit",
   "license": "MIT",
-  "keywords": ["aeo", "seo", "ai-search", "llms-txt", "schema", "broken-links", "site-audit"]
+  "keywords": ["aeo", "seo", "ai-search", "llms-txt", "schema", "structured-data", "site-audit", "geo"]
 }

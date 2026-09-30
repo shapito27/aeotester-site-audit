@@ -46,10 +46,23 @@ test('longest match wins over a blanket Allow (divergence: extension let any All
   assert.equal(r.score, 0)
 })
 
-test('partial block: half the bots blocked scores about half', () => {
+test('only GPTBot allowed: one major bot earns 1 of the 9 major points', () => {
   const r = runCheck(check, site('User-agent: *\nDisallow: /\n\nUser-agent: GPTBot\nAllow: /\n'))
   assert.equal(r.details.allowedCount, 1)
-  assert.equal(r.score, Math.round((1 / r.details.totalBots) * 12))
+  assert.equal(r.score, Math.round(9 * 1 / 10)) // 0.9 -> 1
+})
+
+test('blocking the major AI bots costs most of the points (divergence)', () => {
+  const r = runCheck(check, site('User-agent: *\nAllow: /\n\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nDisallow: /\n'))
+  assert.deepEqual(r.details.majorBlocked, ['ClaudeBot', 'GPTBot'])
+  assert.equal(r.score, 9) // 10.2 -> 10, capped at 9 (warning); the extension gave 12
+  assert.match(r.message, /major bots: ClaudeBot, GPTBot/)
+})
+
+test('blocking only minor bots costs little', () => {
+  const r = runCheck(check, site('User-agent: *\nAllow: /\n\nUser-agent: Bytespider\nUser-agent: CCBot\nDisallow: /\n'))
+  assert.equal(r.details.majorBlocked.length, 0)
+  assert.equal(r.score, 12)
 })
 
 test('crawl-delay over 5s on allowed bots costs 2 points', () => {
