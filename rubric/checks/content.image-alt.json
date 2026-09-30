@@ -10,17 +10,22 @@
     "rendered DOM: every img element and its alt attribute"
   ],
   "scoring": {
-    "summary": "If there are no img elements: pass, 5. Otherwise percentage = round(100 * imagesWithAlt / totalImages), where an image counts only if alt exists and alt.trim() is non-empty. score = round(percentage / 100 * 5).",
+    "summary": "Images with alt=\"\" that are also marked decorative (role=\"presentation\"/\"none\" or aria-hidden=\"true\") are excluded. If no other img elements remain: 5. Otherwise percentage = round(100 * imagesWithAlt / totalImages), where an image counts only if alt exists and alt.trim() is non-empty. score = round(percentage / 100 * 5).",
     "rules": [
       {
+        "id": "images.decorative",
+        "condition": "img has alt attribute with empty/whitespace value AND (role is 'presentation' or 'none' OR aria-hidden=\"true\")",
+        "points": "excluded from the count"
+      },
+      {
         "id": "images.none",
-        "condition": "document has 0 img elements",
+        "condition": "no img elements remain after excluding decorative images",
         "status": "pass",
         "points": 5
       },
       {
         "id": "images.alt_coverage",
-        "condition": "img counts as having alt iff getAttribute(\"alt\") !== null and alt.trim().length > 0 (alt=\"\" and whitespace-only count as MISSING)",
+        "condition": "img counts as having alt iff getAttribute(\"alt\") !== null and alt.trim().length > 0 (plain alt=\"\" and whitespace-only count as MISSING)",
         "points": "score = Math.round(Math.round(100*withAlt/total) / 100 * 5)"
       },
       {
@@ -48,7 +53,7 @@
         "points": 5
       }
     ],
-    "status_mapping": "percentage < 60 -> fail; 60 <= percentage < 90 -> warning; >= 90 -> pass (no images -> pass). Note 50-59% scores 3 but is fail.",
+    "status_mapping": "From the integer score with the shared rule: 4-5 pass, 3 warning, 0-2 fail. So 50-89% coverage is a warning or pass depending on rounding (e.g. 50% => 3 warning, 70% => 4 pass).",
     "inconclusive": null
   },
   "detect": {
@@ -62,7 +67,7 @@
   },
   "fixable": "assisted",
   "fix_recipe": "fix-recipes/content.image-alt.md",
-  "fix_summary": "Add descriptive alt attributes to each img in templates, components and markdown (e.g. ![Descriptive text](img.png), <Image alt=\"...\">). The plugin can draft alt text from filename/context but a human should confirm; note that marking decorative images alt=\"\" still counts as missing for this check.",
+  "fix_summary": "Add descriptive alt attributes to each img in templates, components and markdown (e.g. ![Descriptive text](img.png), <Image alt=\"...\">). The plugin can draft alt text from filename/context but a human should confirm. Purely decorative images should use alt=\"\" together with role=\"presentation\" or aria-hidden=\"true\"; plain alt=\"\" still counts as missing.",
   "stacks": [
     "static-html",
     "astro",
@@ -74,5 +79,22 @@
     "images.none",
     "images.alt_coverage"
   ],
-  "extension_source": "src/shared/checks/image-alt-checker.js"
+  "extension_source": "src/shared/checks/image-alt-checker.js",
+  "divergences": [
+    {
+      "extension": "alt=\"\" always counts as missing, while the recommendation tells users to use alt=\"\" for decorative images.",
+      "plugin": "alt=\"\" combined with role=\"presentation\"/\"none\" or aria-hidden=\"true\" is treated as explicitly decorative and left out of the count; plain alt=\"\" still counts as missing, and the recommendation says so.",
+      "reason": "Following the extension's own advice lowered the score; explicit decorative markup is the correct pattern."
+    },
+    {
+      "extension": "Status from the percentage: < 60% fail, < 90% warning (so 50-59% scores 3 but is a fail).",
+      "plugin": "Status from the integer score with the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    },
+    {
+      "extension": "Counts every img in the live DOM, including tracking pixels and widget images.",
+      "plugin": "Counts img elements in each built/static HTML file.",
+      "reason": "Source substitute: the plugin reads the repo, not a rendered page."
+    }
+  ]
 }

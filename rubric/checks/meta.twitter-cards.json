@@ -11,15 +11,14 @@
     "meta[property=og:title|og:description|og:image]"
   ],
   "scoring": {
-    "summary": "Tags are read with meta[name=\"twitter:X\"] falling back to meta[property=\"twitter:X\"]. If none of twitter:card/title/description/image exist (null) but any og:title/og:description/og:image has non-empty content, return warning 2. Otherwise start at 3: -0.75 per missing required tag (card, title, description), -0.75 per present-but-empty (whitespace) required tag, -0.5 if twitter:image missing, -0.25 if twitter:card value not in [summary, summary_large_image, app, player]. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "summary": "Tags are read with meta[name=\"twitter:X\"] falling back to meta[property=\"twitter:X\"]. If none of twitter:card/title/description/image exist but any og:title/og:description/og:image (property= or name=) has non-empty content, score 2. Otherwise start at 3: -0.75 per missing required tag (card, title, description), -0.75 per present-but-empty required tag, -0.5 if twitter:image missing, -0.25 if twitter:card value not in [summary, summary_large_image, app, player]. Score = max(0, score), floored by the engine; status from the integer score.",
     "rules": [
       {
         "condition": "getMetaContent(name): document.querySelector('meta[name=\"'+name+'\"]') || document.querySelector('meta[property=\"'+name+'\"]'); returns its content or null if no element",
         "points": "n/a"
       },
       {
-        "condition": "twitter:card, twitter:title, twitter:description, twitter:image all null AND (og:title || og:description || og:image content truthy)",
-        "status": "warning",
+        "condition": "twitter:card, twitter:title, twitter:description, twitter:image all null AND (og:title || og:description || og:image content truthy, read from property= or name=)",
         "points": 2,
         "note": "early return, OG fallback"
       },
@@ -44,11 +43,11 @@
         "points": "0 (informational)"
       },
       {
-        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "condition": "score = max(0, score); the engine floors it to an integer",
         "points": "n/a"
       }
     ],
-    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: all 4 tags valid => 3 pass; only image missing => 2.5 pass/2; invalid card type => 2.75 pass/2; one required missing => 2.25 warning/2 (1.75 warning/1 if image also missing); no twitter and no OG => 0.25 fail/0; OG-only => warning/2.",
+    "status_mapping": "From the floored integer score: 3 pass, 2 warning, 0-1 fail. Examples: all 4 tags valid => 3 pass; only image missing => 2 warning; invalid card type => 2 warning; one required missing => 2 warning (1 fail if image also missing); OG-only => 2 warning; nothing => 0 fail.",
     "inconclusive": null
   },
   "detect": {
@@ -78,5 +77,17 @@
     "social.twitter.image",
     "social.twitter.og_fallback"
   ],
-  "extension_source": "src/shared/checks/twitter-cards-checker.js"
+  "extension_source": "src/shared/checks/twitter-cards-checker.js",
+  "divergences": [
+    {
+      "extension": "The OG fallback only looks at meta[property=\"og:*\"].",
+      "plugin": "The OG fallback also accepts meta[name=\"og:*\"].",
+      "reason": "Kept consistent with meta.open-graph, which accepts name= as a fallback."
+    },
+    {
+      "extension": "Status comes from the unrounded decimal score while the reported score is floored.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    }
+  ]
 }

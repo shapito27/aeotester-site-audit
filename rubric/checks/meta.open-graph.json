@@ -11,10 +11,10 @@
     "link[rel=\"canonical\"] href"
   ],
   "scoring": {
-    "summary": "Tags are read only via meta[property=\"og:X\"]. Start at 3: -0.75 per missing required tag (og:title, og:description, og:image), -0.75 per present-but-empty required tag, -0.25 if og:url missing, -0.25 if og:type missing, -0.25 if og:url and a canonical both exist and normalizeUrl(og:url) !== normalizeUrl(canonical href). An og:image that is not an absolute URL adds an issue but no deduction. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "summary": "Tags are read from meta[property=\"og:X\"], falling back to meta[name=\"og:X\"]. Start at 3: -0.75 per missing required tag (og:title, og:description, og:image), -0.75 per present-but-empty required tag, -0.25 if og:url missing, -0.25 if og:type missing, -0.25 if og:url and a canonical both exist and normalizeUrl(og:url) !== normalizeUrl(canonical). A non-absolute og:image is reported but not scored. Score = max(0, score), floored by the engine; status from the integer score.",
     "rules": [
       {
-        "condition": "getMetaContent(p) = document.querySelector('meta[property=\"'+p+'\"]')?.content, null if element absent (meta name=\"og:*\" is NOT read)",
+        "condition": "getMetaContent(p) = content of meta[property=\"p\"], else of meta[name=\"p\"]; null if neither element exists",
         "points": "n/a"
       },
       {
@@ -38,7 +38,7 @@
         "points": "0 (issue text only)"
       },
       {
-        "condition": "og:url truthy AND link[rel=\"canonical\"] exists AND normalizeUrl(og:url) !== normalizeUrl(canonical.href). normalizeUrl = protocol//hostname + pathname + search, trailing '/' removed, lowercased (port and hash dropped). canonical.href is resolved to absolute by the browser.",
+        "condition": "og:url truthy AND link[rel=\"canonical\"] has an href AND normalizeUrl(og:url) !== normalizeUrl(canonical). normalizeUrl = protocol//hostname + pathname + search, trailing '/' removed, lowercased. A relative canonical is resolved against the page URL (site base URL + path); when no base URL is known it is resolved against og:url instead.",
         "points": "-0.25"
       },
       {
@@ -46,11 +46,11 @@
         "points": "0 (informational)"
       },
       {
-        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "condition": "score = max(0, score); the engine floors it to an integer",
         "points": "n/a"
       }
     ],
-    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: all present and consistent => 3 pass; missing og:url or og:type or mismatch => 2.75 pass/2; missing url+type => 2.5 pass/2; one required missing => 2.25 warning/2; nothing at all => 0.25 fail/0.",
+    "status_mapping": "From the floored integer score: 3 pass, 2 warning, 0-1 fail. Examples: all present and consistent => 3 pass; missing og:url or og:type or mismatch => 2 warning; one required missing => 2 warning; nothing at all => 0 fail.",
     "inconclusive": null
   },
   "detect": {
@@ -81,5 +81,22 @@
     "social.og.type",
     "social.og.url_matches_canonical"
   ],
-  "extension_source": "src/shared/checks/opengraph-checker.js"
+  "extension_source": "src/shared/checks/opengraph-checker.js",
+  "divergences": [
+    {
+      "extension": "Only meta[property=\"og:*\"] is read; name=\"og:*\" counts as missing.",
+      "plugin": "name=\"og:*\" is accepted as a fallback when no property= tag exists.",
+      "reason": "Consumers accept both and the extension's Twitter check already reads both; failing it was a false negative."
+    },
+    {
+      "extension": "Status comes from the unrounded decimal score while the reported score is floored.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    },
+    {
+      "extension": "The canonical href is resolved by the browser against the visited URL.",
+      "plugin": "A relative canonical is resolved against the page URL built from site.baseUrl; without a base URL it is resolved against og:url.",
+      "reason": "Source substitute: there is no visited URL, and resolving against a placeholder host would always mismatch."
+    }
+  ]
 }

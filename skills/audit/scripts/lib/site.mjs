@@ -154,12 +154,14 @@ export function parseHeadersFile(text) {
 }
 
 function patternToRegex(pattern) {
-  let p = pattern.replace(/^https?:\/\/[^/]+/, '')
+  const p = pattern.replace(/^https?:\/\/[^/]+/, '')
+  // Vercel "(.*)" and splats ("*", ":name*") mean any sequence; ":name" is one segment
   const re = p
+    .replace(/\(\.\*\)|:\w+\*|\*/g, '\u0000')
+    .replace(/:\w+/g, '\u0001')
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\\\(\.\*\\\)/g, '.*') // vercel "(.*)"
-    .replace(/:\w+\*?/g, '[^/]+')
-    .replace(/\*/g, '.*')
+    .replace(/\u0000/g, '.*')
+    .replace(/\u0001/g, '[^/]+')
   return new RegExp(`^${re}$`)
 }
 

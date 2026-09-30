@@ -12,22 +12,22 @@
     "meta[http-equiv=\"Content-Language\"]"
   ],
   "scoring": {
-    "summary": "Start at 3. Missing or whitespace-only lang: -2. If present: must match /^([a-z]{2,3})(-([A-Z]{2}))?$/i else -0.5; if it matches but the language code is not in the built-in 70-code list, -0.5; else if a region is present and not in the built-in 70-region list, -0.25. hreflang and Content-Language are informational (issue text only, no points). finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "summary": "Start at 3. Missing or whitespace-only lang: -2. If present it must match language[-Script][-REGION] (/^([a-z]{2,3})(-[a-z]{4})?(-([a-z]{2}|\\d{3}))?$/i) else -0.5; if it matches but the language code is neither in the extension's 70-code list nor known to the runtime's ICU data (Intl.DisplayNames), -0.5; else if a region is present and is neither numeric (UN M.49), in the 70-region list, nor known to ICU, -0.25. hreflang and Content-Language are informational (finding only, no points). Score = max(0, score), floored by the engine.",
     "rules": [
       {
         "condition": "html lang attribute missing or trim() empty",
         "points": "-2"
       },
       {
-        "condition": "lang.trim() does not match /^([a-z]{2,3})(-([A-Z]{2}))?$/i (e.g. 'zh-Hans', 'en_US', 'es-419', 'en-US-x-foo' fail)",
+        "condition": "lang.trim() does not match /^([a-z]{2,3})(?:-([a-z]{4}))?(?:-([a-z]{2}|\\d{3}))?$/i (e.g. 'en_US', 'en-US-x-foo' fail; 'zh-Hans', 'zh-Hant-TW', 'es-419' pass)",
         "points": "-0.5"
       },
       {
-        "condition": "language code (lowercased) not in: en es fr de it pt ru ja ko zh ar hi bn pa te mr ta ur gu kn nl pl uk ro el hu cs sv da fi no nb nn tr th vi id ms he fa sw tl fil ca eu gl sr hr bs sk sl bg mk sq et lv lt mt is ga cy af zu xh am ne si km lo my",
+        "condition": "language code (lowercased) not in the extension list (en es fr de it pt ru ja ko zh ar hi bn pa te mr ta ur gu kn nl pl uk ro el hu cs sv da fi no nb nn tr th vi id ms he fa sw tl fil ca eu gl sr hr bs sk sl bg mk sq et lv lt mt is ga cy af zu xh am ne si km lo my) AND Intl.DisplayNames has no English name for it",
         "points": "-0.5"
       },
       {
-        "condition": "else region present (uppercased) and not in: US GB CA AU NZ IE ZA IN PK NG ES MX AR CO PE VE CL EC GT CU FR BE CH LU MC DE AT IT PT BR RU UA BY KZ JP KR CN TW HK SG NL PL RO GR HU CZ SE DK FI NO TR TH VN ID MY PH IL AE SA EG KE GH MA DZ TN LY ET TZ UG ZW",
+        "condition": "else region present (uppercased), not a 3-digit UN M.49 code, not in the extension list (US GB CA AU NZ IE ZA IN PK NG ES MX AR CO PE VE CL EC GT CU FR BE CH LU MC DE AT IT PT BR RU UA BY KZ JP KR CN TW HK SG NL PL RO GR HU CZ SE DK FI NO TR TH VN ID MY PH IL AE SA EG KE GH MA DZ TN LY ET TZ UG ZW) AND Intl.DisplayNames has no name for it",
         "points": "-0.25"
       },
       {
@@ -39,11 +39,11 @@
         "points": "0 (informational)"
       },
       {
-        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "condition": "score = max(0, score); the engine floors it to an integer",
         "points": "n/a"
       }
     ],
-    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Reachable: valid lang => 3 pass; unknown region => 2.75 pass/2; bad format or unknown language => 2.5 pass/2; missing lang => 1 fail/1. Warning is unreachable.",
+    "status_mapping": "From the floored integer score: 3 pass, 2 warning, 0-1 fail. Valid lang => 3 pass; unknown region, bad format or unknown language => 2 warning; missing lang => 1 fail.",
     "inconclusive": null
   },
   "detect": {
@@ -57,7 +57,7 @@
   },
   "fixable": "auto",
   "fix_recipe": "fix-recipes/meta.language.md",
-  "fix_summary": "Set <html lang=\"en\"> (or the correct 'll' / 'll-RR' code such as en-US) in the root layout: index.html, Astro layout, Hugo baseof.html with languageCode in hugo.toml, Eleventy base layout, Next.js app/layout.tsx or pages/_document.tsx. Avoid script subtags like zh-Hans, which the extension penalizes.",
+  "fix_summary": "Set <html lang=\"en\"> (or the correct 'll' / 'll-RR' code such as en-US) in the root layout: index.html, Astro layout, Hugo baseof.html with languageCode in hugo.toml, Eleventy base layout, Next.js app/layout.tsx or pages/_document.tsx.",
   "stacks": [
     "static-html",
     "astro",
@@ -71,5 +71,22 @@
     "lang.html.known_code",
     "lang.hreflang.x_default"
   ],
-  "extension_source": "src/shared/checks/language-checker.js"
+  "extension_source": "src/shared/checks/language-checker.js",
+  "divergences": [
+    {
+      "extension": "Valid BCP 47 tags with a script subtag or numeric region (zh-Hans, zh-Hant-TW, es-419) fail the format regex (-0.5).",
+      "plugin": "language[-Script][-REGION] with a 2-letter or 3-digit region is accepted.",
+      "reason": "These are correct language tags; penalizing them was a false positive."
+    },
+    {
+      "extension": "Only a 70-language and 70-region subset counts as known, so valid codes like 'la', 'eo' or the region in 'lv-LV' are penalized.",
+      "plugin": "A code outside those lists still counts as known when the runtime's ICU data (Intl.DisplayNames) has a name for it.",
+      "reason": "False positives on valid ISO 639 / ISO 3166 codes."
+    },
+    {
+      "extension": "Status comes from the unrounded score, so any lang issue shows 'pass' with 2/3 points and 'warning' is unreachable.",
+      "plugin": "Status is derived from the reported integer score (2/3 is a warning).",
+      "reason": "Status and score must agree."
+    }
+  ]
 }

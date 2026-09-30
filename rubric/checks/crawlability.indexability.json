@@ -11,13 +11,14 @@
     "page HTML <head>: meta[name=\"robots\"] and any meta whose name contains 'bot' (case-insensitive)",
     "page <title>",
     "rendered visible text of main content and of body (innerText)",
-    "current page URL"
+    "current page URL",
+    "host config X-Robots-Tag for the page path (_headers, vercel.json, netlify.toml via site.host.headersFor)"
   ],
   "scoring": {
-    "summary": "Three sub-checks run first. If any critical issue exists (a noindex/none directive, a soft 404, or a canonical on a different hostname) the check fails with 0. Otherwise score = 8 minus the canonical penalty (none 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0.",
+    "summary": "Three sub-checks run first. If any critical issue exists (noindex/none in a robots or *bot* meta tag or in a configured X-Robots-Tag header, a soft 404, or a canonical on a different hostname when the site base URL is known) the score is 0. Otherwise score = 8 minus the canonical penalty (none or no valid href 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0. Directives are whole comma/space-separated tokens. A result that depends on an X-Robots-Tag header is marked predicted.",
     "rules": [
       {
-        "condition": "canonical: no link[rel=\"canonical\"]",
+        "condition": "canonical: no link[rel=\"canonical\"], or exactly one with an empty/unparseable href",
         "points": "-1",
         "canonical_status": "warning"
       },
@@ -27,35 +28,35 @@
         "canonical_status": "fail"
       },
       {
-        "condition": "canonical: exactly one, and new URL(canonical.href).hostname !== new URL(currentUrl).hostname (www vs apex counts as different)",
+        "condition": "canonical: exactly one, site base URL known (or the href is relative), and the resolved canonical hostname !== the page URL hostname (www vs apex counts as different). Without a base URL an absolute canonical's host is not compared.",
         "status": "fail",
         "points": 0,
         "critical": true,
         "message": "Canonical points to different domain (critical issue)"
       },
       {
-        "condition": "canonical: exactly one, same hostname, normalizeUrl(canonical) === normalizeUrl(current). normalizeUrl = protocol//hostname+pathname+search, strip ONE trailing '/', lowercase; drops port and #fragment, keeps query string",
+        "condition": "canonical: exactly one, same hostname (or host not compared), and either normalizeUrl(canonical) === normalizeUrl(page URL) (protocol//hostname+pathname+search, strip ONE trailing '/', lowercase), or the canonical path resolves (exact, .html, /index.html) to this same file with the same protocol and query. Without a base URL only pathname+search are compared.",
         "points": "0",
         "canonical_status": "pass"
       },
       {
-        "condition": "canonical: exactly one, same hostname, normalized URLs differ (different path, query, or http vs https)",
+        "condition": "canonical: exactly one, same hostname, not self-referencing (different path/file, query, or http vs https)",
         "points": "-2",
         "canonical_status": "warning"
       },
       {
-        "condition": "noindex: first meta[name=\"robots\"] content (lowercased) contains substring 'none' OR 'noindex'; OR any meta[name*=\"bot\" i] (e.g. robots, googlebot, bingbot, GPTBot) content contains 'none' or 'noindex'",
+        "condition": "noindex: any meta[name*=\"bot\" i] (robots, googlebot, GPTBot, ...) or X-Robots-Tag header rule for the page path (also the path without .html) has a directive token 'noindex' or 'none'. Tokens are split on ',' and whitespace; 'max-snippet:', 'max-image-preview:', 'max-video-preview:', 'unavailable_after:' parameters are ignored and a 'ua:' prefix is stripped",
         "status": "fail",
         "points": 0,
         "critical": true,
         "message": "Page has noindex directive"
       },
       {
-        "condition": "nofollow: same metas, content contains 'nofollow' or 'none' (and no noindex, otherwise critical already)",
+        "condition": "nofollow: same sources, directive token 'nofollow' or 'none' (and no noindex, otherwise critical already)",
         "points": "-2"
       },
       {
-        "condition": "soft404 signal A: document.title lowercased contains any of '404', 'not found', 'page not found', 'error', 'no encontrado', 'nicht gefunden'",
+        "condition": "soft404 signal A: document.title lowercased contains a standalone '404' (not inside a phone number or product code), 'not found', 'page not found', the whole word 'error', 'no encontrado' or 'nicht gefunden'",
         "points": "signal"
       },
       {
@@ -63,7 +64,7 @@
         "points": "signal"
       },
       {
-        "condition": "soft404 signal C: first 1000 chars of body innerText (lowercased) contain 'page not found' or '404'",
+        "condition": "soft404 signal C: first 1000 chars of body visible text (lowercased, whitespace collapsed) contain 'page not found' or a standalone '404'",
         "points": "signal"
       },
       {
@@ -78,18 +79,18 @@
         "points": "max(0, 8 - canonicalPenalty - (hasNofollow ? 2 : 0))"
       }
     ],
-    "status_mapping": "Any critical issue: fail with 0. Otherwise score >= 6 pass, >= 4 warning, else fail. Reachable non-critical outcomes: 8, 7 (no canonical), 6 (other URL, or nofollow), 5 (multiple canonicals or no canonical + nofollow), 4, 3.",
-    "inconclusive": null
+    "status_mapping": "Any critical issue: 0 fail. Otherwise from the integer score with the shared rule: 7-8 pass, 4-6 warning, 0-3 fail. Reachable non-critical outcomes: 8, 7 (no canonical), 6 (other URL, or nofollow), 5 (multiple canonicals or no canonical + nofollow), 4, 3.",
+    "inconclusive": "Never inconclusive. Results that depend on an X-Robots-Tag rule from host config are marked predicted: verify the live response header."
   },
   "detect": {
     "method": "hybrid",
     "script": "checks/crawlability/indexability.mjs",
-    "source_procedure": "Per page template/route: 1) Canonical: find <link rel=\"canonical\"> in static *.html; Astro layouts (often href={Astro.url} or new URL(Astro.url.pathname, Astro.site)); Hugo baseof/head partials ({{ .Permalink }}) plus baseURL in hugo.toml; Eleventy _includes layouts with page.url and site url data; Next.js app router metadata.alternates.canonical (and metadataBase) in app/**/layout.tsx/page.tsx, pages router next/head; Vite SPA index.html. Count occurrences in the composed head (layout + page + SEO components; plugins like @astrojs/sitemap do not add canonicals but next-seo/astro-seo do). Compare the resolved host with the production host (from site/baseURL/metadataBase/vercel or netlify config/CNAME); treat www vs apex mismatch as critical. 2) Robots meta: grep for <meta name=\"robots\"|googlebot|bingbot|...bot> and Next.js metadata.robots ({index:false} renders noindex, {follow:false} renders nofollow); flag substrings noindex, none, nofollow exactly as the extension does (including max-image-preview:none, which contains 'none'). Watch for env-conditional noindex (e.g. noindex on preview builds) and note it. 3) Soft 404: compute title keywords and approximate main-content word count from built HTML (main/article/[role=main]/.content/#content, else body minus nav/footer/header/aside/script/style/noscript), and check the first 1000 chars of visible body text for '404' or 'page not found'. Best done on build output; otherwise let a model estimate word count from template + content files.",
-    "llm_criteria": "Only for soft-404 when output HTML is unavailable: estimate whether the visible main content of the page has fewer than 200 words, whether the <title> contains 404/not found/error/no encontrado/nicht gefunden (substring, so 'Error handling guide' counts), and whether the first ~1000 characters of visible body text contain '404' or 'page not found' (this includes phone numbers or prices containing 404). Soft 404 = at least 2 of the 3."
+    "source_procedure": "Per page template/route: 1) Canonical: find <link rel=\"canonical\"> in static *.html; Astro layouts (often href={Astro.url} or new URL(Astro.url.pathname, Astro.site)); Hugo baseof/head partials ({{ .Permalink }}) plus baseURL in hugo.toml; Eleventy _includes layouts with page.url and site url data; Next.js app router metadata.alternates.canonical (and metadataBase) in app/**/layout.tsx/page.tsx, pages router next/head; Vite SPA index.html. Count occurrences in the composed head (layout + page + SEO components; plugins like @astrojs/sitemap do not add canonicals but next-seo/astro-seo do). Compare the resolved host with the production host (from site/baseURL/metadataBase/vercel or netlify config/CNAME); treat www vs apex mismatch as critical. 2) Robots meta: grep for <meta name=\"robots\"|googlebot|bingbot|...bot> and Next.js metadata.robots ({index:false} renders noindex, {follow:false} renders nofollow); flag directive tokens noindex, none, nofollow (not substrings, so max-image-preview:none is fine). Watch for env-conditional noindex (e.g. noindex on preview builds) and note it. 3) Soft 404: compute title keywords and approximate main-content word count from built HTML (main/article/[role=main]/.content/#content, else body minus nav/footer/header/aside/script/style/noscript), and check the first 1000 chars of visible body text for '404' or 'page not found'. Best done on build output; otherwise let a model estimate word count from template + content files.",
+    "llm_criteria": "Only for soft-404 when output HTML is unavailable: estimate whether the visible main content of the page has fewer than 200 words, whether the <title> contains a standalone 404, not found, the word error, no encontrado or nicht gefunden, and whether the first ~1000 characters of visible body text contain a standalone '404' or 'page not found' (a 404 inside a phone number or product code does not count). Soft 404 = at least 2 of the 3."
   },
   "parity": {
     "level": "partial",
-    "note": "Canonical and meta robots are usually exact from templates or metadata exports, but host resolution depends on the production domain, and values injected by JS (SPA route changes, SEO plugins, tag managers) or CMS are invisible in source. Extension compares canonical against the actual visited URL (including http/https, query strings and trailing slash rules), which source can only approximate. Soft-404 depends on rendered innerText and word counts, which source can only estimate without a build. X-Robots-Tag headers are NOT part of this check (see httpBehavior)."
+    "note": "Canonical and meta robots are usually exact from templates or metadata exports, but host resolution depends on the production domain, and values injected by JS (SPA route changes, SEO plugins, tag managers) or CMS are invisible in source. Extension compares canonical against the actual visited URL (including http/https, query strings and trailing slash rules), which source can only approximate. Soft-404 depends on rendered innerText and word counts, which source can only estimate without a build. The extension cannot read X-Robots-Tag here; the plugin reads it from host config (_headers, vercel.json, netlify.toml) and marks such results predicted."
   },
   "fixable": "auto",
   "fix_recipe": "fix-recipes/crawlability.indexability.md",
@@ -110,5 +111,42 @@
     "index.robots_meta.nofollow",
     "index.soft404"
   ],
-  "extension_source": "src/shared/checks/indexability-checker.js"
+  "extension_source": "src/shared/checks/indexability-checker.js",
+  "divergences": [
+    {
+      "extension": "Directives are substring matches, so 'max-image-preview:none' reads as 'none' and zeroes the check.",
+      "plugin": "Directives are whole tokens split on ',' and whitespace; max-* and unavailable_after parameters are skipped and a 'googlebot:' style prefix is stripped.",
+      "reason": "False positive on a valid, non-blocking directive."
+    },
+    {
+      "extension": "Soft-404 signals match '404' anywhere (phone numbers like 404-555-0100, product codes) and 'error' as a substring.",
+      "plugin": "'404' must stand alone (not adjacent to letters, digits or hyphens) and 'error' must be a whole word.",
+      "reason": "False positives on normal content zeroed the whole check."
+    },
+    {
+      "extension": "X-Robots-Tag cannot be read from the content script and is ignored.",
+      "plugin": "X-Robots-Tag rules from host config for the page path (and its clean URL without .html) count like robots meta; the result is marked predicted.",
+      "reason": "Source substitute: a noindex header configured in the repo blocks indexing just like the meta tag; the live header should be verified."
+    },
+    {
+      "extension": "The canonical is compared with the visited URL; a different hostname is always critical.",
+      "plugin": "The page URL is site.baseUrl + page path. When no base URL is known, an absolute canonical's host is not compared and only its path and query are.",
+      "reason": "Source substitute: without a base URL the page host is a placeholder, and comparing it would zero every page."
+    },
+    {
+      "extension": "A canonical to the clean URL (/about) while visiting /about.html is 'different URL' (-2), because the visited URL differs.",
+      "plugin": "A canonical whose path a static host would serve from this same file (exact, .html, /index.html) counts as self-referencing, provided protocol and query match.",
+      "reason": "Source substitute: the repo file path is not the served URL; clean URLs are the normal way these files are served."
+    },
+    {
+      "extension": "A canonical link with an empty or invalid href throws (new URL('')).",
+      "plugin": "It is treated like a missing canonical (-1) with a finding.",
+      "reason": "Crash in the extension."
+    },
+    {
+      "extension": "Status: >= 6 pass, >= 4 warning.",
+      "plugin": "Status from the shared 80% / 50% rule (7/8 pass).",
+      "reason": "All checks share one status rule in the plugin."
+    }
+  ]
 }

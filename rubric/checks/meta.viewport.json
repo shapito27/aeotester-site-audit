@@ -10,15 +10,15 @@
     "page HTML <head>: meta[name=\"viewport\"] content"
   ],
   "scoring": {
-    "summary": "No viewport meta => fail 0. Otherwise start at 3; content is split on ',' and each part on '=' (trimmed, keys case-sensitive). width != 'device-width': -1.5 if a width value is set, -1 if width absent. initial-scale absent/empty: -0.5; present but parseFloat != 1: -0.25. user-scalable=no/0 and maximum-scale < 2 produce issue text only. finalScore = max(0, round(score*10)/10); status from finalScore; reported score = floor(finalScore).",
+    "summary": "No viewport meta (name matched case-insensitively) => 0. Otherwise start at 3; content is split on ',' or ';' and each part on '=' (trimmed, keys lowercased). width != 'device-width' (case-insensitive): -1.5 if a width value is set, -1 if width absent. initial-scale absent/empty: -0.5; present but parseFloat != 1: -0.25. user-scalable=no/0, maximum-scale < 2 and ';' separators produce findings only. Score = max(0, score), floored by the engine.",
     "rules": [
       {
-        "condition": "no element for document.querySelector('meta[name=\"viewport\"]')",
+        "condition": "no element for meta[name=\"viewport\" i]",
         "status": "fail",
         "points": 0
       },
       {
-        "condition": "settings.width === 'device-width' (exact string after trim)",
+        "condition": "settings.width lowercased === 'device-width' (content split on ',' or ';', keys lowercased)",
         "points": "0"
       },
       {
@@ -46,11 +46,15 @@
         "points": "0 (issue text only)"
       },
       {
-        "condition": "finalScore = max(0, round(score*10)/10); reported = Math.floor(finalScore)",
+        "condition": "content uses ';' as a separator",
+        "points": "0 (finding only)"
+      },
+      {
+        "condition": "score = max(0, score); the engine floors it to an integer",
         "points": "n/a"
       }
     ],
-    "status_mapping": "Using decimal finalScore: >= 2.5 pass, >= 1.5 warning, else fail. Examples: width=device-width, initial-scale=1 => 3 pass; device-width only => 2.5 pass/2; device-width + initial-scale 0.5 => 2.75 pass/2; initial-scale=1 only => 2 warning/2; fixed width + initial-scale=1 => 1.5 warning/1; fixed width, no scale => 1 fail/1; empty content => 1.5 warning/1.",
+    "status_mapping": "From the floored integer score: 3 pass, 2 warning, 0-1 fail. Examples: width=device-width, initial-scale=1 => 3 pass; device-width only => 2 warning; device-width + initial-scale 0.5 => 2 warning; initial-scale=1 only => 2 warning; fixed width + initial-scale=1 => 1 fail; fixed width, no scale => 1 fail; empty content => 1 fail.",
     "inconclusive": null
   },
   "detect": {
@@ -77,5 +81,17 @@
     "mobile.viewport.device_width",
     "mobile.viewport.initial_scale"
   ],
-  "extension_source": "src/shared/checks/mobile-checker.js"
+  "extension_source": "src/shared/checks/mobile-checker.js",
+  "divergences": [
+    {
+      "extension": "Parts are split on ',' only and keys are case-sensitive, so 'width=device-width; initial-scale=1' scores as a fixed width with no initial-scale (1/3).",
+      "plugin": "',' and ';' both separate parts, keys and the device-width value are case-insensitive, and the tag name is matched case-insensitively. A ';' separator is reported as a finding without a deduction.",
+      "reason": "Browsers apply such viewports (with a console warning), so the extension's score was a false positive."
+    },
+    {
+      "extension": "Status comes from the unrounded decimal score while the reported score is floored.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    }
+  ]
 }

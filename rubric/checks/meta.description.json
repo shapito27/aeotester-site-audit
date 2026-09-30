@@ -11,10 +11,10 @@
     "document.title"
   ],
   "scoring": {
-    "summary": "Start at 5. Missing tag or empty (trimmed length 0) => fail 0 immediately. Otherwise deduct for length (trimmed length: <70 -2; 70-119 -1; >170 -1; 161-170 -0.5; 120-160 no deduction), generic/placeholder opening (-2), exact match with title (-1) and keyword stuffing (-0.5). finalScore = max(0, round(score*10)/10). Status is derived from the unrounded-down finalScore, then the reported score is Math.floor(finalScore).",
+    "summary": "Start at 5. Missing tag (meta[name=\"description\"], name matched case-insensitively) or empty content => 0. Otherwise deduct for trimmed length (<70 -2; 70-119 -1; >170 -1; 161-170 -0.5; 120-160 none), generic/placeholder opening (-2), exact match with the title (-1) and keyword stuffing (-0.5). Score = max(0, score), floored by the engine; status from the integer score (>= 80% pass, >= 50% warning).",
     "rules": [
       {
-        "condition": "no element matches document.querySelector('meta[name=\"description\"]') (first match only; attribute name match is case-sensitive in selector value)",
+        "condition": "no element matches meta[name=\"description\" i] (first match only; name compared case-insensitively)",
         "status": "fail",
         "points": 0
       },
@@ -65,11 +65,11 @@
         "points": "0 (informational, details.hasCta only)"
       },
       {
-        "condition": "finalScore = max(0, round(score*10)/10); reported score = Math.floor(finalScore)",
+        "condition": "score = max(0, score); the engine floors it to an integer",
         "points": "n/a"
       }
     ],
-    "status_mapping": "Using the decimal finalScore (before floor): >= 4 pass, >= 2.5 warning, else fail. Reported score is floor(finalScore), so e.g. 4.5 => pass with 4 points, 3.5 => warning with 3 points.",
+    "status_mapping": "From the floored integer score: 4-5 pass, 3 warning, 0-2 fail. E.g. 4.5 => 4 pass, 3.5 => 3 warning, 2.5 => 2 fail.",
     "inconclusive": null
   },
   "detect": {
@@ -99,5 +99,22 @@
     "meta.description.equals_title",
     "meta.description.keyword_stuffing"
   ],
-  "extension_source": "src/shared/checks/meta-description-checker.js"
+  "extension_source": "src/shared/checks/meta-description-checker.js",
+  "divergences": [
+    {
+      "extension": "meta[name=\"description\"] is matched case-sensitively, so name=\"Description\" counts as missing.",
+      "plugin": "The name attribute is matched case-insensitively.",
+      "reason": "Search engines read name=\"Description\"; failing it was a false negative."
+    },
+    {
+      "extension": "Status comes from the unrounded decimal score while the reported score is floored.",
+      "plugin": "Status is derived from the reported integer score by the shared 80% / 50% rule.",
+      "reason": "Status and score must agree."
+    },
+    {
+      "extension": "Reads the rendered DOM of the visited page.",
+      "plugin": "Reads each built/static HTML file in the served root, with entities decoded before measuring.",
+      "reason": "The plugin audits the repo, not a live page."
+    }
+  ]
 }

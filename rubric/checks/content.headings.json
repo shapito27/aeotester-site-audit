@@ -10,7 +10,7 @@
     "rendered DOM: all h1-h6 elements in document order and their textContent"
   ],
   "scoring": {
-    "summary": "No headings at all => fail 0. Otherwise start at 8: no H1 -3, or more than one H1 -2; -1 per skipped level (a heading whose level > previous heading level + 1), capped at -2; -1 if more than 3 generic/short headings. Score is an integer; status pass >= 6, warning >= 4, else fail.",
+    "summary": "No headings at all => 0. Otherwise start at 8: no H1 -3, or more than one H1 -2; -1 per skipped level (a heading whose level > previous heading level + 1; the first heading is never a skip), capped at -2; -1 if more than 3 generic/short headings. Integer score; status from the shared rule (>= 7 pass, >= 4 warning).",
     "rules": [
       {
         "condition": "document.querySelectorAll('h1, h2, h3, h4, h5, h6').length === 0",
@@ -38,7 +38,7 @@
         "points": "n/a"
       }
     ],
-    "status_mapping": ">= 6 pass, >= 4 warning, else fail (integer score, no flooring needed). Worst case 8-3-2-1 = 2 fail.",
+    "status_mapping": "From the integer score with the shared 80% / 50% rule: 7-8 pass, 4-6 warning, 0-3 fail. Worst case 8-3-2-1 = 2 fail.",
     "inconclusive": null
   },
   "detect": {
@@ -66,5 +66,17 @@
     "headings.hierarchy.no_skips",
     "headings.text.descriptive"
   ],
-  "extension_source": "src/shared/checks/heading-analyzer.js"
+  "extension_source": "src/shared/checks/heading-analyzer.js",
+  "divergences": [
+    {
+      "extension": "Status: >= 6 pass, >= 4 warning (so 6/8 is a pass).",
+      "plugin": "Status from the shared rule: >= 80% (7/8) pass, >= 50% (4/8) warning.",
+      "reason": "All checks share one status rule in the plugin."
+    },
+    {
+      "extension": "Counts every h1-h6 in the live DOM, including headings injected by scripts and widgets.",
+      "plugin": "Counts h1-h6 in each built/static HTML file.",
+      "reason": "Source substitute: the plugin reads the repo, not a rendered page."
+    }
+  ]
 }
