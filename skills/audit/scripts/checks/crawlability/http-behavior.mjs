@@ -4,7 +4,7 @@
 // predicted from host config and the served files:
 //   1. unknown URLs return 404: a 404 page (or host default) and no catch-all
 //      rewrite/redirect that turns every path into a 200
-//   2. pages return 200: no redirect, error status or Basic-Auth rule on them
+//   2. pages return 200: no redirect or error status rule on them
 //   3. no X-Robots-Tag noindex/none header rule (_headers, vercel.json,
 //      netlify.toml, .htaccess) covering the pages
 
@@ -85,8 +85,6 @@ function probeUnknownUrl(site, rules) {
 }
 
 function pageStatus(site, rules, urlPath, resolveLocal) {
-  const auth = site.host.headersFor(urlPath)['basic-auth']
-  if (auth?.length) return { ok: false, status: 401, file: auth[0].source, line: headerLine(site, auth[0].source, 'basic-auth'), reason: `Basic-Auth header rule in ${auth[0].source}` }
   for (const r of rules) {
     if (/^https?:\/\//i.test(r.from)) continue
     if (r.status === 200) continue // rewrites do not change the status of an existing page
@@ -160,7 +158,7 @@ export default {
     const score = probe.point + pagePoint + headerPoint
     const recs = []
     if (probe.point < 1) recs.push(probe.soft404 ? 'Remove the catch-all 200 rewrite or redirect-to-home rule for unknown paths and add a 404.html' : 'Add a 404.html (or framework 404 page) so unknown URLs return HTTP 404')
-    if (bad.length) recs.push('remove the redirect, error or auth rules that apply to published pages')
+    if (bad.length) recs.push('remove the redirect or error rules that apply to published pages')
     if (blocked.length) recs.push('remove X-Robots-Tag noindex/none from header rules for production pages')
 
     return {

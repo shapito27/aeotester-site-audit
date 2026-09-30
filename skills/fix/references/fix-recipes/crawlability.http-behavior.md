@@ -6,7 +6,7 @@
 |---|---|
 | `Catch-all rule turns unknown URLs into HTTP 200 (soft 404)` (0 of 1) | Remove the catch-all 200 rewrite or redirect-to-home rule; add a 404 page |
 | `No 404 page (404.html) in the served root` (0.5 of 1, inconclusive) | Add a 404 page |
-| `Page is served with HTTP N instead of 200` (up to 1) | Remove the redirect, error-status or Basic-Auth rule covering published pages |
+| `Page is served with HTTP N instead of 200` (up to 1) | Remove the redirect or error-status rule covering published pages |
 | `X-Robots-Tag header rule contains noindex/none` (up to 1) | Remove noindex/none from header rules for production paths |
 
 Full points (1 each): unknown URLs return a real 404/410, every page returns 200, no X-Robots-Tag noindex/none. All predicted from repo config; verify live with `curl -I`.
@@ -29,7 +29,7 @@ Full points (1 each): unknown URLs return a real 404/410, every page returns 200
 3. Assisted: a catch-all 200 rewrite is often needed by a client-side router (vite-spa). Ask before removing it. Alternatives: list real routes explicitly, prerender routes, or keep the fallback and accept the lost point.
 4. Remove a redirect-to-home rule for unknown paths only with the user's OK (it may be a deliberate migration rule).
 5. Remove X-Robots-Tag noindex/none rules that match production paths. Keep rules scoped to preview hosts or private paths. Ask if the intent is unclear.
-6. Basic-Auth or error-status rules on published pages: report them and ask; they are usually deliberate.
+6. Error-status rules on published pages: report them and ask; they are usually deliberate.
 7. Host dashboard settings (Cloudflare Pages SPA fallback, host-level auth) cannot be changed from the repo; tell the user what to change.
 
 ## Template

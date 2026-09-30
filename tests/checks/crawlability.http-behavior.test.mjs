@@ -79,12 +79,6 @@ test('unforced _redirects rules are shadowed by existing files', () => {
   assert.equal(runCheck(check, base({ ...NOT_FOUND, _redirects: '/about.html  /gone.html  301\n' })).score, 3)
 })
 
-test('Basic-Auth header on pages predicts 401', () => {
-  const r = runCheck(check, base({ ...NOT_FOUND, _headers: '/*\n  Basic-Auth: user:pass\n' }))
-  assert.equal(r.details.pages.notOk.length, 2)
-  assert.equal(r.score, 2)
-})
-
 test('framework 404 source page counts without a build', () => {
   const files = { 'package.json': '{"dependencies":{"astro":"4"}}', 'astro.config.mjs': 'export default {}', 'src/pages/index.astro': '<h1>Hi</h1>', 'src/pages/404.astro': '<h1>404</h1>' }
   const r = runCheck(check, files)
