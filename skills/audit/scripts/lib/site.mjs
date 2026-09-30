@@ -320,7 +320,7 @@ export function loadSite(root, options = {}) {
       const rel = toPosix(posix.join(toPosix(site.servedRoot), f))
       site.pages.push({ file: rel, urlPath: urlPathFor(f) })
     }
-    if (content.length > maxPages) site.notes.push(`Audited the first ${maxPages} of ${content.length} pages (use --max-pages to change).`)
+    if (content.length > maxPages) site.notes.push(`Audited the first ${maxPages} of ${content.length} pages (use --pages to change).`)
   }
 
   site.sitemaps = findSitemaps(site)
@@ -380,15 +380,17 @@ function guessBaseUrl(site) {
 
 // Loads and parses one page. Kept separate so checks only pay for what they use.
 export function loadPage(site, page) {
-  const html = readText(join(site.root, page.file)) ?? ''
+  // URL mode pages arrive with their HTML already fetched
+  const html = page.html ?? readText(join(site.root, page.file)) ?? ''
   const doc = parseHTML(html)
-  const url = site.baseUrl ? new URL(page.urlPath, site.baseUrl).href : `https://example.invalid${page.urlPath}`
+  const url = page.url || (site.baseUrl ? new URL(page.urlPath, site.baseUrl).href : `https://example.invalid${page.urlPath}`)
   return { ...page, html, doc, url, hasRealUrl: !!site.baseUrl }
 }
 
 // Resolves a same-site URL path to a file in the served root, the way static
 // hosts do: exact file, then .html, then /index.html.
 export function resolveLocal(site, urlPath) {
+  if (site.live) return site.live.response(urlPath)?.ok ? urlPath : null
   if (!site.servedRoot) return null
   let p = decodeURIComponent(urlPath.split(/[?#]/)[0])
   if (!p.startsWith('/')) p = '/' + p

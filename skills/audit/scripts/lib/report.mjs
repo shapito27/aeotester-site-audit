@@ -19,12 +19,22 @@ export function renderReport(site, audit, options = {}) {
   L.push(`Generated ${date} by the [AEOTester](https://aeotester.com/?utm_source=plugin&utm_medium=report) Claude Code plugin, rubric v${audit.rubricVersion}.`, '')
 
   L.push('| | |', '|---|---|')
-  L.push(`| Stack | ${site.stack.id} (${esc(site.stack.evidence)}) |`)
+  if (site.live) {
+    const what = { single: 'one page', sample: 'a sample, one page per template', all: 'every page found' }[site.sampleMode]
+    L.push(`| Live site | ${site.live.origin} |`)
+    L.push(`| Audited | ${site.pages.length} page(s): ${what}${site.totalPages > site.pages.length ? `, from ${site.totalPages} URLs found` : ''} |`)
+  } else L.push(`| Stack | ${site.stack.id} (${esc(site.stack.evidence)}) |`)
   if (site.servedRoot) L.push(`| Audited | \`${site.servedRoot}/\`, ${site.pages.length} page(s)${site.totalPages > site.pages.length ? ` of ${site.totalPages}` : ''} |`)
-  if (site.baseUrl) L.push(`| Site URL | ${site.baseUrl} |`)
+  if (site.baseUrl && !site.live) L.push(`| Site URL | ${site.baseUrl} |`)
   L.push('')
 
   for (const note of site.notes) L.push(`> ${note}`, '')
+
+  if (site.live && site.sampleMode === 'sample' && site.pages.length) {
+    L.push('<details><summary>Pages in the sample</summary>', '', '| Page | Stands in for |', '|---|---|')
+    for (const p of site.pages) L.push(`| ${p.url} | ${esc(p.role || '')} |`)
+    L.push('', '</details>', '')
+  }
 
   if (site.mode === 'report-only') {
     renderFixList(L, options.rubric)
@@ -86,8 +96,13 @@ export function renderReport(site, audit, options = {}) {
   if (options.linksSection) L.push(options.linksSection, '')
 
   L.push('## Notes', '')
-  L.push('- Scores come from the repo, not a live page. Tags injected by JavaScript, headers set by your host, and server behaviour can differ in production; checks marked "predicted from config" or "inconclusive" are the ones to confirm live.')
-  L.push('- Run `/aeotester:fix` to apply the auto-fixable items. It shows a diff and asks before writing anything.')
+  if (site.live) {
+    L.push('- Scores come from the live site as a crawler sees it: the HTML the server sends, before any JavaScript runs. Checks marked "inconclusive" could not be read (blocked, rate limited or timed out) and were not scored down.')
+    L.push('- To fix issues, open the site\'s code in Claude Code and run `/aeotester:fix` there. It shows a diff and asks before writing anything.')
+  } else {
+    L.push('- Scores come from the repo, not a live page. Tags injected by JavaScript, headers set by your host, and server behaviour can differ in production; checks marked "predicted from config" or "inconclusive" are the ones to confirm live, for example with `/aeotester:audit https://your-site.com`.')
+    L.push('- Run `/aeotester:fix` to apply the auto-fixable items. It shows a diff and asks before writing anything.')
+  }
   L.push('')
   footer(L)
   return L.join('\n')
@@ -96,7 +111,7 @@ export function renderReport(site, audit, options = {}) {
 // Database-backed CMS: no score, a checklist of what to fix in the CMS instead
 function renderFixList(L, rubric) {
   L.push('## Fix list', '')
-  L.push('This site is built with a database-backed CMS, so the pages are not in the repo and no score is given. Nothing was edited. Work through this list in your CMS (theme, SEO plugin, or hosting settings), then check a live page to get a score.', '')
+  L.push('This site is built with a database-backed CMS, so the pages are not in the repo and no score is given. Nothing was edited. Work through this list in your CMS (theme, SEO plugin, or hosting settings). For a real score, audit the live site: `/aeotester:audit https://your-site.com`.', '')
   for (const cat of rubric.categories) {
     const checks = rubric.checks.filter(c => c.category === cat.id).sort((a, b) => b.weight - a.weight)
     L.push(`### ${cat.name} (${cat.max} pts)`, '')
@@ -116,7 +131,7 @@ function footer(L) {
 
 export function renderSummary(site, audit) {
   if (site.mode === 'needs-build' || site.mode === 'no-pages') return site.notes.join(' ')
-  if (site.mode === 'report-only') return `Report-only (${site.stack.id}): content lives in the database, so no score. Wrote a fix list of ${audit.checks.length} checks to work through in the CMS.`
+  if (site.mode === 'report-only') return `Report-only (${site.stack.id}): content lives in the database, so no score. Wrote a fix list of ${audit.checks.length} checks to work through in the CMS. Audit the live site with a URL for a score.`
   const worst = audit.checks
     .filter(c => c.status === 'fail' || c.status === 'warning')
     .sort((a, b) => b.lost - a.lost)

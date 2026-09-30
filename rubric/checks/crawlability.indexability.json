@@ -147,6 +147,11 @@
       "extension": "Status: >= 6 pass, >= 4 warning.",
       "plugin": "Status from the shared 80% / 50% rule (7/8 pass).",
       "reason": "All checks share one status rule in the plugin."
+    },
+    {
+      "extension": "Reads meta robots from the DOM only.",
+      "plugin": "URL mode: X-Robots-Tag comes from the page's real response header, so a noindex there is measured (predicted false) and its finding points at the page URL with no line. No host config file is read for header line numbers.",
+      "reason": "Source vs live: URL mode can observe what the repo only predicts."
     }
   ]
 }

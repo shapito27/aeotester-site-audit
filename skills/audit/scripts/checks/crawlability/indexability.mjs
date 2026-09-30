@@ -58,6 +58,8 @@ function countWords(text) {
 }
 
 function headerLine(site, source, value) {
+  // URL mode: the header came from a live response, there is no file
+  if (site.live || source === 'HTTP response') return null
   try {
     const lines = readFileSync(join(site.root, source), 'utf8').split(/\r?\n/)
     const i = lines.findIndex(l => /x-robots-tag/i.test(l) && l.includes(value))
@@ -167,7 +169,7 @@ export default {
     for (const i of robots.issues) {
       const what = i.hasNoindex ? (i.hasNofollow ? 'noindex, nofollow' : 'noindex') : 'nofollow'
       if (i.type === 'meta') findings.push({ file, line: i.line, message: `<meta name="${i.name}"> blocks indexing (${what})` })
-      else findings.push({ file: i.source, line: i.line, message: `X-Robots-Tag header blocks indexing (${what})` })
+      else findings.push({ file: site.live ? page.url : i.source, line: site.live ? null : i.line, message: `X-Robots-Tag header blocks indexing (${what})` })
     }
     if (canonical.status !== 'pass') {
       if (canonical.lines) for (const line of canonical.lines.slice(1)) findings.push({ file, line, message: 'Duplicate canonical link' })
@@ -179,7 +181,8 @@ export default {
     }
 
     const headerOnly = robots.issues.length > 0 && robots.issues.every(i => i.type === 'header')
-    const predicted = robots.issues.some(i => i.type === 'header')
+    // Header rules from repo config are predicted; URL mode reads real headers
+    const predicted = !site.live && robots.issues.some(i => i.type === 'header')
     const details = {
       canonical: { status: canonical.status, message: canonical.message, canonical: canonical.canonical ?? null, urls: canonical.urls, penalty: canonical.penalty, hostCompared: canonical.hostCompared ?? null },
       robots: { hasNoindex: robots.hasNoindex, hasNofollow: robots.hasNofollow, issues: robots.issues },
@@ -190,7 +193,7 @@ export default {
     const critical = []
     if (robots.hasNoindex) {
       critical.push('Page has a noindex directive')
-      recs.push(headerOnly ? 'Remove noindex from the X-Robots-Tag header rule for this path' : 'Remove noindex / none from the robots meta tag in production')
+      recs.push(headerOnly ? (site.live ? 'Remove noindex from the X-Robots-Tag response header for this path' : 'Remove noindex from the X-Robots-Tag header rule for this path') : 'Remove noindex / none from the robots meta tag in production')
     }
     if (soft404.isSoft404) {
       critical.push('Soft 404 detected')

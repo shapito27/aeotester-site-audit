@@ -5,11 +5,15 @@
 // types come from host config. Framework route handlers that would produce
 // an artifact count as predicted. WebMCP annotations and API evidence are
 // read from every audited page, not just one.
+//
+// URL mode: the files remote.mjs fetched (site.wellKnown, 2xx non-HTML
+// answers only) with their real content types; no route-handler predictions.
 
 import { existsSync } from 'node:fs'
 import { join, posix } from 'node:path'
 import { readText, toPosix } from '../../lib/site.mjs'
 import { extractJsonLd } from '../../lib/jsonld.mjs'
+import { isUnreachable, responseLabel } from '../../lib/remote.mjs'
 
 const isObject = v => !!v && typeof v === 'object' && !Array.isArray(v)
 
@@ -44,6 +48,22 @@ function routeHandlers(site, urlPath) {
 }
 
 function readArtifact(site, urlPath, helpers) {
+  if (site.live) {
+    const entry = (site.wellKnown || []).find(w => w.urlPath === urlPath)
+    if (!entry) return null
+    const text = entry.text ?? ''
+    const contentType = entry.contentType || ''
+    const isHtml = /text\/html|application\/xhtml/i.test(contentType) || /^\s*<(!doctype|html)/i.test(text)
+    let json = null
+    if (text.trim() && !isHtml) {
+      try {
+        json = JSON.parse(text)
+      } catch {
+        json = null
+      }
+    }
+    return { file: entry.path, text, contentType, isHtml, json }
+  }
   const dirs = [...new Set([site.fileRoot, site.sourcePublicDir].filter(Boolean))]
   for (const d of dirs) {
     const rel = toPosix(posix.join(toPosix(d), urlPath))
@@ -120,7 +140,7 @@ export default {
         }
       }
       if (valid) found.push({ ...a, file: hit.file })
-      const routes = hit ? [] : routeHandlers(site, a.path)
+      const routes = hit || site.live ? [] : routeHandlers(site, a.path)
       if (!valid && routes.length) predictedFound.push({ ...a, file: routes[0] })
       probed.push({ path: a.path, file: hit?.file ?? routes[0] ?? null, found: valid, predicted: !valid && routes.length > 0, invalid: !!hit && !valid })
     }
@@ -163,6 +183,22 @@ export default {
     const evidence = pages.flatMap(findApiEvidence)
     const seen = new Set()
     const apiEvidence = evidence.filter(e => !seen.has(e.sample) && seen.add(e.sample))
+    // URL mode: discovery paths that could not be read prove nothing
+    const unreadable = site.live ? ARTIFACTS.map(a => ({ path: a.path, res: site.live.response(a.path) })).filter(u => u.res && isUnreachable(u.res)) : []
+    if (apiEvidence.length && unreadable.length) {
+      return {
+        score: 3,
+        inconclusive: true,
+        message: `API surface detected; ${unreadable.length} discovery path${unreadable.length === 1 ? '' : 's'} could not be read (${responseLabel(unreadable[0].res)})`,
+        findings: [
+          ...unreadable.slice(0, 5).map(u => ({ file: site.live.origin + u.path, line: null, message: `Fetching ${u.path} answered ${responseLabel(u.res)}` })),
+          ...apiEvidence.slice(0, 5).map(e => ({ file: e.file, line: e.line, message: `API surface evidence: ${e.sample}` })),
+          ...invalidFindings
+        ],
+        recommendation: 'Make sure the /.well-known/ discovery paths are reachable for agents (not blocked by bot protection or rate limiting).',
+        details: { ...details, inconclusive: true, unreachable: unreadable.map(u => u.path), apiEvidence: apiEvidence.map(e => e.sample) }
+      }
+    }
     if (apiEvidence.length) {
       return {
         score: 0,

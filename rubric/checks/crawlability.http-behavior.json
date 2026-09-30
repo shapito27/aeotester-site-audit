@@ -94,6 +94,11 @@
       "extension": "An X-Robots-Tag noindex/none header forces status fail regardless of score.",
       "plugin": "The header point is lost; status is derived from the integer score by the shared rule (so 2/3 is a warning).",
       "reason": "Status and score must agree (engine-derived status)."
+    },
+    {
+      "extension": "Probes a random URL, fetches the page and reads its X-Robots-Tag header live.",
+      "plugin": "URL mode measures all three criteria and reads no repo files. Unknown URL: status of a made-up URL (404/410 or another 4xx: 1; 2xx, including after a redirect: 0, soft 404; unreachable (0, 401, 403, 429, 503, timeout) or a 5xx: 0.5, inconclusive). Page status: fraction of fetched pages among fetched plus failed page URLs with a real 4xx/5xx; unreachable failures and section roots guessed by the sampler are ignored. X-Robots-Tag: fraction of pages whose real response header has no noindex/none. Results are measured, not predicted.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

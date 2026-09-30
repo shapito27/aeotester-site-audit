@@ -9,6 +9,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseRobots, canCrawl, groupsFor } from '../../lib/robots.mjs'
 import { robotsGenerator } from '../../lib/sources.mjs'
+import { isUnreachable, responseLabel } from '../../lib/remote.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const BOT_LIST = JSON.parse(readFileSync(join(here, '..', '..', '..', 'references', 'ai-bots.json'), 'utf8'))
@@ -22,6 +23,7 @@ const WEIGHT = 12
 const MAJOR_BLOCKED_CAP = 9
 const ABSENT_SCORE = 8
 const MAX_DELAY = 5
+const UNREACHABLE_SCORE = WEIGHT / 2
 
 export default {
   id: 'ai-access.bot-crawlability',
@@ -29,6 +31,29 @@ export default {
   run({ site }) {
     const robots = site.robotsTxt
     const path = '/'
+
+    // URL mode: robots.txt was fetched. Unreachable (blocked, rate limited,
+    // timed out) says nothing about the rules; a 404 or an HTML fallback is absent.
+    if (!robots && site.live) {
+      const res = site.live.response('/robots.txt')
+      if (isUnreachable(res)) {
+        return {
+          score: UNREACHABLE_SCORE,
+          inconclusive: true,
+          message: `robots.txt could not be read (${responseLabel(res)})`,
+          findings: [{ file: `${site.live.origin}/robots.txt`, line: null, message: `Fetching /robots.txt answered ${responseLabel(res)}, so the rules for AI crawlers are unknown` }],
+          recommendation: 'Make sure /robots.txt is reachable for crawlers (not blocked by bot protection or rate limiting) and that it allows AI crawlers.',
+          details: { robotsTxtExists: null, inconclusive: true, status: res?.status ?? null, error: res?.error ?? null, path }
+        }
+      }
+      return {
+        score: ABSENT_SCORE,
+        message: 'robots.txt not found - all bots allowed by default',
+        findings: [{ file: `${site.live.origin}/robots.txt`, line: null, message: `No robots.txt (${res && res.ok ? 'the URL returns an HTML page' : responseLabel(res)})` }],
+        recommendation: 'Add a robots.txt at the site root that explicitly allows AI crawlers (e.g. "User-agent: *" then "Allow: /").',
+        details: { robotsTxtExists: false, allBotsAllowed: true, status: res?.status ?? null, path }
+      }
+    }
 
     if (!robots) {
       const generator = robotsGenerator(site)

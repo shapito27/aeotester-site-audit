@@ -254,6 +254,11 @@
           "extension": "All 126 bots count equally: score = round(allowed / 126 * 12), so blocking GPTBot and ClaudeBot still scores 12/12.",
           "plugin": "Ten major AI search and assistant crawlers (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, Google-Extended, Applebot-Extended) share 9 points and the other 116 share 3: score = round(9 * majorAllowed / 10 + 3 * otherAllowed / 116). Blocking any major bot caps the score at 9 (a warning). The list lives in references/ai-bots.json (major_bots).",
           "reason": "Blocking the crawlers behind ChatGPT, Claude, Perplexity, Gemini and Apple Intelligence is what actually removes a site from AI answers; an obscure scraper should not weigh the same."
+        },
+        {
+          "extension": "Fetches /robots.txt live; an unreachable robots.txt is treated like a missing one.",
+          "plugin": "URL mode (audit of a live URL): parses the fetched /robots.txt. A 404, another non-2xx status or an HTML fallback is absent (8/12). An unreachable answer (status 0, 401, 403, 429, 503, timeout or network error) is inconclusive at half weight (6/12). The robots.txt generator lookup in the repo is skipped. Results are measured, not predicted.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     },
@@ -372,6 +377,11 @@
           "extension": "Fetches /llms.txt live; any non-2xx (including 403/429/503/timeout) is fail 0; an HTML soft-200 page counts as found.",
           "plugin": "Reads llms.txt from the served root; absence is informative (0); a generated llms.txt is inconclusive at 3.",
           "reason": "Source vs live, and the unreachable-vs-absent rule."
+        },
+        {
+          "extension": "Fetches /llms.txt live; any failure is treated as absent.",
+          "plugin": "URL mode: evaluates the fetched /llms.txt. A 404, an empty body or an HTML fallback is absent (0). An unreachable answer (0, 401, 403, 429, 503, timeout, network error) is inconclusive at half weight (3/6). An unreachable robots.txt sets robotsUnknown instead of a penalty. The llms.txt generator lookup is skipped.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     },
@@ -471,6 +481,11 @@
           "extension": "If robots.txt alone is unreachable but the page responded without a header, the check fails with 0.",
           "plugin": "No equivalent: a robots.txt that exists in the repo is always read; only a generated one is inconclusive.",
           "reason": "Unreachable-vs-absent rule."
+        },
+        {
+          "extension": "Reads Content-Signal from the fetched robots.txt and the page response header.",
+          "plugin": "URL mode: reads Content-Signal lines from the fetched robots.txt and the real Content-Signal response header of every audited page (first valid one wins, measured, not predicted). When robots.txt is unreachable (0, 401, 403, 429, 503, timeout) and no page sends the header the result is inconclusive at 2/3, not 0. A 404 robots.txt is absent. Generator logic is skipped.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     },
@@ -623,6 +638,11 @@
           "extension": "Status: >= 6 pass, >= 4 warning.",
           "plugin": "Status from the shared 80% / 50% rule (7/8 pass).",
           "reason": "All checks share one status rule in the plugin."
+        },
+        {
+          "extension": "Reads meta robots from the DOM only.",
+          "plugin": "URL mode: X-Robots-Tag comes from the page's real response header, so a noindex there is measured (predicted false) and its finding points at the page URL with no line. No host config file is read for header line numbers.",
+          "reason": "Source vs live: URL mode can observe what the repo only predicts."
         }
       ]
     },
@@ -737,6 +757,11 @@
           "extension": "Reports whether the current page URL appears in the sitemap (informational).",
           "plugin": "Not reported (site check).",
           "reason": "No current page in a site-level source audit; it never affected the score."
+        },
+        {
+          "extension": "Probes four sitemap URLs live and reads robots.txt.",
+          "plugin": "URL mode: uses the sitemaps fetched from robots.txt Sitemap: lines, /sitemap.xml and /sitemap_index.xml (index files followed). When none is found and any of those URLs or robots.txt was unreachable (0, 401, 403, 429, 503, timeout) the result is inconclusive at half weight, never a fail. A sitemap found while robots.txt is unreachable is not penalized for a missing Sitemap: line (inconclusive). The sitemap generator lookup is skipped.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     },
@@ -821,6 +846,11 @@
           "extension": "Mixed content is checked on the current page only.",
           "plugin": "Site check over every loaded page; any mixed content on any page costs the 0.5 point, one finding per element.",
           "reason": "Site-level audit of all pages; findings group by message across pages."
+        },
+        {
+          "extension": "Reads the scheme of the current tab and scans the page for mixed content.",
+          "plugin": "URL mode measures: 0 when the fetched origin is http://. On https the score is 2 minus 0.5 for mixed content and 0.5 when http:// answers 2xx with content instead of redirecting (floored). The http:// origin is fetched without following redirects; a 3xx with a Location starting https:// counts as a redirect, and an unreachable http:// origin is not penalized. The real Strict-Transport-Security header is reported (recommended, not scored). Host and config predictions are skipped; results are not predicted.",
+          "reason": "Source vs live: URL mode can observe what the repo only predicts."
         }
       ]
     },
@@ -920,6 +950,11 @@
           "extension": "An X-Robots-Tag noindex/none header forces status fail regardless of score.",
           "plugin": "The header point is lost; status is derived from the integer score by the shared rule (so 2/3 is a warning).",
           "reason": "Status and score must agree (engine-derived status)."
+        },
+        {
+          "extension": "Probes a random URL, fetches the page and reads its X-Robots-Tag header live.",
+          "plugin": "URL mode measures all three criteria and reads no repo files. Unknown URL: status of a made-up URL (404/410 or another 4xx: 1; 2xx, including after a redirect: 0, soft 404; unreachable (0, 401, 403, 429, 503, timeout) or a 5xx: 0.5, inconclusive). Page status: fraction of fetched pages among fetched plus failed page URLs with a real 4xx/5xx; unreachable failures and section roots guessed by the sampler are ignored. X-Robots-Tag: fraction of pages whose real response header has no noindex/none. Results are measured, not predicted.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     },
@@ -3231,6 +3266,11 @@
           "extension": "Link header and DOM alternate come from the live response and rendered DOM.",
           "plugin": "Link headers come from host config (_headers, netlify.toml, vercel.json); the alternate from the built HTML.",
           "reason": "Source-vs-live."
+        },
+        {
+          "extension": "Requests the page with Accept: text/markdown and checks for a markdown alternate.",
+          "plugin": "URL mode measures: the first 20 pages are fetched again with Accept: text/markdown, and advertised markdown alternates (<link rel=alternate type=text/markdown> or a Link header) are fetched. 5 when the page answers 2xx with Content-Type text/markdown; 3 when negotiation fails but an advertised alternate answers 2xx with non-HTML content; otherwise 0, not inconclusive, because negotiation was tested. An unreachable negotiation request (0, 401, 403, 429, 503, timeout) is inconclusive at half weight, and an advertised alternate that could not be fetched is 3, inconclusive. Pages beyond the 20 probed are judged from their own <link>/Link header (3, inconclusive), else 5 predicted when another probed page negotiated, else half weight inconclusive rather than 0. Repo evidence and .md file lookups are skipped.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     },
@@ -3528,6 +3568,11 @@
           "extension": "The page host is the live URL.",
           "plugin": "The page host comes from the site base URL; without one, only relative links (and api./docs. subdomains of nothing) are same-site.",
           "reason": "Source-vs-live."
+        },
+        {
+          "extension": "Probes the discovery URLs live.",
+          "plugin": "URL mode: uses the fetched /.well-known/ paths and /openapi.json (2xx non-HTML answers only) with their real Content-Type; framework route-handler predictions are skipped, so nothing is predicted. When the site shows an API surface, no artifact is found and some discovery paths were unreachable (0, 401, 403, 429, 503, timeout), the result is inconclusive at 3/6 instead of 0. Still na when there is no API or agent surface.",
+          "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
         }
       ]
     }

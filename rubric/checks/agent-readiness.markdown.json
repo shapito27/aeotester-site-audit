@@ -97,6 +97,11 @@
       "extension": "Link header and DOM alternate come from the live response and rendered DOM.",
       "plugin": "Link headers come from host config (_headers, netlify.toml, vercel.json); the alternate from the built HTML.",
       "reason": "Source-vs-live."
+    },
+    {
+      "extension": "Requests the page with Accept: text/markdown and checks for a markdown alternate.",
+      "plugin": "URL mode measures: the first 20 pages are fetched again with Accept: text/markdown, and advertised markdown alternates (<link rel=alternate type=text/markdown> or a Link header) are fetched. 5 when the page answers 2xx with Content-Type text/markdown; 3 when negotiation fails but an advertised alternate answers 2xx with non-HTML content; otherwise 0, not inconclusive, because negotiation was tested. An unreachable negotiation request (0, 401, 403, 429, 503, timeout) is inconclusive at half weight, and an advertised alternate that could not be fetched is 3, inconclusive. Pages beyond the 20 probed are judged from their own <link>/Link header (3, inconclusive), else 5 predicted when another probed page negotiated, else half weight inconclusive rather than 0. Repo evidence and .md file lookups are skipped.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

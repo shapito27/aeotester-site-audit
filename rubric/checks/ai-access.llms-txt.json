@@ -113,6 +113,11 @@
       "extension": "Fetches /llms.txt live; any non-2xx (including 403/429/503/timeout) is fail 0; an HTML soft-200 page counts as found.",
       "plugin": "Reads llms.txt from the served root; absence is informative (0); a generated llms.txt is inconclusive at 3.",
       "reason": "Source vs live, and the unreachable-vs-absent rule."
+    },
+    {
+      "extension": "Fetches /llms.txt live; any failure is treated as absent.",
+      "plugin": "URL mode: evaluates the fetched /llms.txt. A 404, an empty body or an HTML fallback is absent (0). An unreachable answer (0, 401, 403, 429, 503, timeout, network error) is inconclusive at half weight (3/6). An unreachable robots.txt sets robotsUnknown instead of a penalty. The llms.txt generator lookup is skipped.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

@@ -94,6 +94,11 @@
       "extension": "If robots.txt alone is unreachable but the page responded without a header, the check fails with 0.",
       "plugin": "No equivalent: a robots.txt that exists in the repo is always read; only a generated one is inconclusive.",
       "reason": "Unreachable-vs-absent rule."
+    },
+    {
+      "extension": "Reads Content-Signal from the fetched robots.txt and the page response header.",
+      "plugin": "URL mode: reads Content-Signal lines from the fetched robots.txt and the real Content-Signal response header of every audited page (first valid one wins, measured, not predicted). When robots.txt is unreachable (0, 401, 403, 429, 503, timeout) and no page sends the header the result is inconclusive at 2/3, not 0. A 404 robots.txt is absent. Generator logic is skipped.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

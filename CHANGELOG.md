@@ -2,7 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - Unreleased
+## [0.2.0] - Unreleased
+
+### Added
+
+- URL mode: `/aeotester:audit https://site.com` audits a live site. The homepage URL audits a sample, one page per template: the homepage, the pages linked from the header, nav and footer, and a listing plus one item from each section (about 25 pages at most). A page URL audits just that page. `--pages N` changes the sample size and `--all` audits every page found (up to 500).
+- In URL mode, response headers, the 404 response, the http to https redirect, Markdown negotiation and `/.well-known/` files are measured on the live site instead of predicted from config. Anything the site blocks or rate-limits is marked inconclusive, never scored down.
+- WordPress and other CMS sites can now get a full score through their live URL.
+
+### Changed
+
+- The plugin makes network requests in URL mode, to the named site only. README and SECURITY.md list exactly what is fetched.
+
+## [0.1.0] - 2026-09-30
 
 First public release.
 
