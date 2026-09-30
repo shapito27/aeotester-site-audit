@@ -264,6 +264,11 @@
       "extension": "Status: >= 4 pass, >= 2 warning.",
       "plugin": "Status is derived from the integer score by the shared 80% / 50% rule (2 is fail).",
       "reason": "Consistent status rule across checks."
+    },
+    {
+      "extension": "Credential abbreviations (DO, MA, MS, BA, RN, CPA...) match case-insensitively, so everyday words like \"do\" earn the expertise point on almost any page.",
+      "plugin": "Credential abbreviations match case-sensitively; titles and phrases (Professor, years of experience) stay case-insensitive.",
+      "reason": "False positives made the expertise point nearly free."
     }
   ]
 }

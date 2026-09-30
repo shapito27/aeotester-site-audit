@@ -108,3 +108,9 @@ test('source: templated schema author name is predicted', () => {
   assert.equal(r.details.detectionMethod, 'schema')
   assert.equal(r.predicted, true)
 })
+
+test('ordinary words are not credentials (divergence: abbreviations are case-sensitive)', () => {
+  const body = '<article><p>By Sam Park</p><p>What do you do when the ma and pa shop down the road is closed? We ask as we go.</p></article>'
+  const r = runCheck(check, { 'index.html': html({ head: '<meta name="author" content="Sam Park">', body }) })
+  assert.deepEqual(r.details.eeat.expertise.matches, [])
+})

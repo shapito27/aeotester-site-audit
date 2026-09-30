@@ -2,12 +2,15 @@
 
 import { extractJsonLd, resolver, typesOf } from '../../lib/jsonld.mjs'
 
+// Credential abbreviations (PhD, MD, DO, MA, BA, CPA...) are matched case-
+// sensitively; the extension matched them case-insensitively, so ordinary
+// words like "do" and "ma" counted as credentials (divergence).
 const EXPERTISE = [
-  /\b(PhD|Ph\.D|Ed\.D|Sc\.D|DPhil|D\.Phil)\b/i,
-  /\b(MD|M\.D|DO|D\.O|DDS|DMD|PharmD|DVM|JD|J\.D)\b/i,
-  /\b(MBA|MFA|MPH|MSW|MEd|M\.Ed|LLM|LL\.M)\b/i,
-  /\b(MA|M\.A|MS|M\.S|MSc|M\.Sc|MEng|M\.Eng)\b/i,
-  /\b(BA|B\.A|BS|B\.S|BSc|B\.Sc|BEng|B\.Eng)\b/i,
+  /\b(PhD|Ph\.D|Ed\.D|Sc\.D|DPhil|D\.Phil)\b/,
+  /\b(MD|M\.D|DO|D\.O|DDS|DMD|PharmD|DVM|JD|J\.D)\b/,
+  /\b(MBA|MFA|MPH|MSW|MEd|M\.Ed|LLM|LL\.M)\b/,
+  /\b(MA|M\.A|MS|M\.S|MSc|M\.Sc|MEng|M\.Eng)\b/,
+  /\b(BA|B\.A|BS|B\.S|BSc|B\.Sc|BEng|B\.Eng)\b/,
   /\b(Dr\.|Prof\.)(?=\s|$)/i,
   /\b(Professor|Lecturer|Researcher|Fellow)\b/i,
   /\b(Associate\s+Professor|Assistant\s+Professor|Adjunct\s+Professor)\b/i,
@@ -20,13 +23,13 @@ const EXPERTISE = [
   /\b(AWS\s+Certified|AWS\s+Solutions\s+Architect|AWS\s+Developer)\b/i,
   /\b(Google\s+Cloud|GCP\s+Certified|Google\s+Certified)\b/i,
   /\b(Azure\s+Certified|Microsoft\s+Certified|MCSE|MCSA|MCP)\b/i,
-  /\b(Cisco\s+Certified|CCNA|CCNP|CCIE)\b/i,
-  /\b(CompTIA|A\+|Network\+|Security\+|CASP)\b/i,
-  /\b(CISSP|CISM|CISA|CEH|OSCP|GIAC|GSEC)\b/i,
-  /\b(PMP|PMI|PRINCE2|Scrum\s+Master|CSM|PSM|SAFe)\b/i,
-  /\b(Six\s+Sigma|Lean\s+Six\s+Sigma|Black\s+Belt|Green\s+Belt)\b/i,
-  /\b(CPA|CFA|CFP|CMA|CIA|ACCA|FRM)\b/i,
-  /\b(RN|NP|PA-C|APRN|LPN|CNA|Board-?Certified)\b/i,
+  /\b(Cisco\s+Certified|CCNA|CCNP|CCIE)\b/,
+  /\b(CompTIA|A\+|Network\+|Security\+|CASP)\b/,
+  /\b(CISSP|CISM|CISA|CEH|OSCP|GIAC|GSEC)\b/,
+  /\b(PMP|PMI|PRINCE2|Scrum\s+Master|CSM|PSM|SAFe)\b/,
+  /\b(Six\s+Sigma|Lean\s+Six\s+Sigma|Black\s+Belt|Green\s+Belt)\b/,
+  /\b(CPA|CFA|CFP|CMA|CIA|ACCA|FRM)\b/,
+  /\b(RN|NP|PA-C|APRN|LPN|CNA|Board-?Certified)\b/,
   /\b(Esq\.)(?=\s|,|$)/i,
   /\b(Attorney|Barrister|Solicitor|Bar\s+Admitted)\b/i,
   /\b(Realtor|Licensed\s+Agent|CLU|ChFC|CPCU)\b/i,
