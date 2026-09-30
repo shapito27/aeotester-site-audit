@@ -1,6 +1,6 @@
 ---
 name: fix
-description: Apply AEOTester fixes in the current repo - JSON-LD schema markup, llms.txt, robots.txt AI crawler rules, Content Signals, meta and social tags, heading hierarchy, language and viewport tags. Shows a diff and asks before writing anything, then re-audits to show the score change.
+description: Apply AEOTester AI SEO fixes in the current repo - JSON-LD schema markup, llms.txt, robots.txt AI crawler rules, Content Signals, meta and social tags, heading hierarchy, language and viewport tags. Shows a diff and asks before writing anything, then re-audits to show the score change.
 argument-hint: "[check-id ...] [--yes]"
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(node:*)

@@ -5,13 +5,13 @@
     "url": "https://aeotester.com"
   },
   "metadata": {
-    "description": "AEOTester plugins for Claude Code: AEO site audit and auto-fix."
+    "description": "AEOTester plugins for Claude Code: AI SEO and AEO / GEO audits with fixes applied in your codebase."
   },
   "plugins": [
     {
       "name": "aeotester",
       "source": "./",
-      "description": "AEO site audit and auto-fix: 138-point AI search checklist, schema markup, llms.txt and AI crawler rules - applied directly in your codebase."
+      "description": "AI SEO audit and auto-fix for your website code: 26 AI search visibility (AEO / GEO) checks, then schema markup, llms.txt, AI crawler rules and meta tags, with a diff before every change."
     }
   ]
 }

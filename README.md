@@ -1,13 +1,15 @@
-# AEOTester Site Audit
+# AEOTester: AI SEO audit and fix for Claude Code
 
-Audit and auto-fix your website for AI search (AEO) - right inside Claude Code. 26 checks, 138 points: schema markup, llms.txt, AI crawler rules, meta tags, headings and agent readiness.
+AEOTester checks whether AI search engines can find, read and cite your website, then fixes what it can in your code. It runs inside Claude Code on your site's repository: `/aeotester:audit` scores the site on 26 checks for AI search visibility (answer engine optimization, AEO, and generative engine optimization, GEO), and `/aeotester:fix` adds the missing pieces, such as JSON-LD schema markup, an llms.txt file, robots.txt rules for AI crawlers, and title, description and Open Graph tags. Every change is shown as a diff before it is written, and nothing is committed for you.
 
-The [AEOTester Chrome extension](https://aeotester.com/?utm_source=github&utm_medium=plugin) tells you what is wrong with a live page. This plugin works in your codebase, so it can also fix it:
+It is built for developers and site owners who want their pages to show up in ChatGPT, Perplexity, Claude, Gemini and Google AI Overviews answers, and who would rather fix the source than paste suggestions from a report.
 
 ```
-/aeotester:audit   ->  score + report with file:line for every issue
-/aeotester:fix     ->  diffs for the fixes, applied after you say yes, then a re-audit
+/aeotester:audit   ->  score out of 138, a report with file:line for every issue
+/aeotester:fix     ->  diffs for the fixes, applied after you approve, then a re-audit
 ```
+
+The checklist is the same one used by the [AEOTester Chrome extension](https://aeotester.com/?utm_source=github&utm_medium=plugin), which checks a live page in the browser.
 
 ## Install
 
@@ -23,7 +25,7 @@ Or inside a Claude Code session:
 /plugin install aeotester@aeotester
 ```
 
-Requires Node 18 or newer (the checks are plain Node scripts with no dependencies).
+Requires Claude Code and Node 18 or newer. The checks are plain Node scripts with no dependencies. The plugin works on a local copy of your site's code, so it is meant for Claude Code rather than chat.
 
 ## Commands
 
@@ -74,9 +76,15 @@ For generated sites the audit reads the built HTML, because that is what crawler
 
 The audit reads your repo, not a live page. Most checks match what the extension sees on the live site. Things that only exist at runtime (response headers set by your host, Markdown served on request, JavaScript-injected tags) are read from host config (`_headers`, `vercel.json`, `netlify.toml`) where possible and marked "predicted" or "inconclusive" in the report. Confirm those on the live site: [check a live URL](https://aeotester.com/?utm_source=github&utm_medium=plugin) or use the Chrome extension.
 
-## Privacy
+## What it runs and what it touches
 
-No network calls. The audit and the fixes read and write local files only, nothing is sent to aeotester.com or anywhere else, and nothing is committed for you. See [SECURITY.md](SECURITY.md).
+- **Runs:** the Node scripts in `skills/audit/scripts/` and `skills/fix/scripts/`, from the skills, with your approval as Claude Code asks for it. No hooks, no MCP servers, no package installs.
+- **Reads:** files in the current repository only.
+- **Writes:** `aeotester-report.md` (audit), and the source files you approve in a diff (fix). If your site needs a build before the audit, it asks before running your build command.
+- **Network:** none. Nothing is sent to aeotester.com or anywhere else. No telemetry.
+- **Git:** never commits, pushes or changes branches.
+
+See [SECURITY.md](SECURITY.md).
 
 ## Development
 

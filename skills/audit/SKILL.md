@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Run the AEOTester AEO (Answer Engine Optimization) checklist - 26 checks, 138 points - on the website in the current repo and write a scored report to aeotester-report.md. Use when the user asks to audit a site for AI search visibility, AEO, GEO, llms.txt, schema markup, AI crawler access or agent readiness.
+description: AI SEO audit of the website in the current repo - the AEOTester checklist for answer engine optimization (AEO) and generative engine optimization (GEO), 26 checks and 138 points - with a scored report in aeotester-report.md. Use when the user asks to audit a site for AI search visibility, AI SEO, AEO, GEO, llms.txt, schema markup, AI crawler access or agent readiness.
 argument-hint: "[site-root] [--max-pages N] [--base-url https://example.com]"
 allowed-tools: Read, Glob, Grep, Bash(node:*)
 ---
