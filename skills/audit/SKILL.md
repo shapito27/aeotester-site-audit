@@ -43,11 +43,19 @@ Two ways to run it:
 
 4. **Summarize in chat** in a few lines, not the whole report:
    - the score, percentage and grade, and in URL mode how many pages were audited,
-   - the three to five issues that lose the most points, each marked auto-fix or assisted,
-   - checks marked "predicted from config" or "inconclusive" that the user should confirm,
+   - the three to five issues that lose the most points (see "Writing each issue" below),
+   - checks marked "predicted from config" or "inconclusive" that the user should confirm (see "Live checks" below),
    - the next step: in repo mode, `/aeotester:fix` applies the auto-fixable items, always with a diff and a confirmation first; in URL mode, open the site's code and run `/aeotester:fix` there.
 
    Link the report file. Do not paste it.
+
+   **Writing each issue.** Write for someone who has never seen the rubric:
+   - Say what the check looks for and why it matters to AI search or agents, in one plain sentence, before the finding.
+   - Show a short concrete example of what is missing or what the fix adds, such as the exact tag or line. For Content Signals, for example: "`robots.txt` sets rules for GPTBot and ClaudeBot, but has no `Content-Signal:` line. That line tells AI companies whether they may use your pages for search results, as answer input, or for training, for example `Content-Signal: search=yes, ai-input=yes, ai-train=no`."
+   - Never show bare rubric labels such as "auto-fix", "assisted" or "inconclusive". Say what they mean instead: "`/aeotester:fix` can change this for you" (auto-fix; after a URL audit, add "in the site's code"), "needs your input, such as dates or copy, so the fix will guide you" (assisted), "can't be confirmed from the files, check the live site" (inconclusive or predicted from config in repo mode), "the site blocked or did not answer this request, so it was not scored down" (inconclusive in URL mode).
+   - Name the affected pages as Markdown links to the page on the live site: the page's canonical URL if it has one, otherwise the base URL plus the served path. Without a known base URL, link the file path instead. List up to 10 pages inline, then say "and N other pages". Get the full list from `--json`, because the printed report shortens it.
+
+   **Live checks.** In repo mode, checks marked "predicted from config" or "inconclusive" can be measured on the deployed site. First offer a URL audit: `/aeotester:audit https://their-site.com` (or the single page URL). For one quick check, the user can also run a command themselves: give it with the `!` prefix (for example `! curl -sI -H "Accept: text/markdown" https://example.com/`) so the output lands in the conversation, say what a pass looks like (here, `Content-Type: text/markdown` in the response headers), and once they run it, read the output and tell them the result. In URL mode these checks were already measured; only "inconclusive" ones (the site blocked or timed out) are worth retrying later.
 
 ## Reference
 
