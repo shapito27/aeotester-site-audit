@@ -7,11 +7,16 @@
 //   2. pages return 200: no redirect or error status rule on them
 //   3. no X-Robots-Tag noindex/none header rule (_headers, vercel.json,
 //      netlify.toml, .htaccess) covering the pages
+//
+// URL mode measures all three instead: the status of a made-up URL
+// (site.live.probe404), the real status of every fetched page, and the real
+// X-Robots-Tag response header. No repo files are read.
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { readText } from '../../lib/site.mjs'
 import { detectHost, redirectRules, isCatchAll } from '../../lib/sources.mjs'
+import { isUnreachable, responseLabel } from '../../lib/remote.mjs'
 
 const NOINDEX = /\b(noindex|none)\b/i
 const NOT_FOUND_SOURCES = [
@@ -104,10 +109,88 @@ function pageStatus(site, rules, urlPath, resolveLocal) {
   return { ok: true, status: 200 }
 }
 
+// URL mode: unknown-URL criterion from the probe response
+function liveProbe(res) {
+  const label = responseLabel(res)
+  if (isUnreachable(res)) return { point: 0.5, inconclusive: true, status: res?.status || null, reason: `The request for a made-up URL answered ${label}, so how unknown URLs are answered is unknown` }
+  if (res.status === 404 || res.status === 410) return { point: 1, status: res.status, reason: `unknown URL returns ${res.status}` }
+  if (res.status >= 200 && res.status < 300) {
+    const where = res.redirected ? ` after redirecting to ${res.finalUrl}` : ''
+    return { point: 0, soft404: true, status: res.status, finalUrl: res.finalUrl, reason: `Unknown URLs return HTTP ${res.status}${where} (soft 404)` }
+  }
+  if (res.status >= 400 && res.status < 500) return { point: 1, status: res.status, reason: `unknown URL returns ${res.status}` }
+  return { point: 0.5, inconclusive: true, status: res.status, reason: `The request for a made-up URL answered ${label} (a server error, not a 404)` }
+}
+
+function runLive(site, pages) {
+  const findings = []
+  const issues = []
+  const origin = site.live.origin
+
+  // 1. Unknown URL
+  const probeRes = site.live.probe404
+  const probe = liveProbe(probeRes)
+  const probeUrl = origin + (probeRes?.urlPath || '/')
+  if (probe.point === 0) {
+    issues.push(probe.reason)
+    findings.push({ file: probeUrl, line: null, message: `A made-up URL answered HTTP ${probe.status}${probeRes.redirected ? ` (redirected to ${probeRes.finalUrl})` : ''} instead of 404 (soft 404)` })
+  } else if (probe.inconclusive) {
+    issues.push(probe.reason)
+    findings.push({ file: probeUrl, line: null, message: probe.reason })
+  }
+
+  // 2. Page status: fetched pages are 2xx by construction; pages that failed
+  // with a real error status count against it, unreachable ones and section
+  // roots guessed by the sampler do not
+  const bad = (site.live.failedPages || [])
+    .filter(f => !f.guessed && !isUnreachable(f) && f.status >= 400)
+    .map(f => ({ url: f.url, status: f.status, reason: `${f.url} answers ${f.status}` }))
+  const unreadable = (site.live.failedPages || []).filter(f => isUnreachable(f)).length
+  for (const b of bad) findings.push({ file: b.url, line: null, message: `Page is served with HTTP ${b.status} instead of 200` })
+  const checked = pages.length + bad.length
+  const pagePoint = checked ? pages.length / checked : 0.5
+  const pagesInconclusive = checked === 0
+  if (bad.length) issues.push(`${bad.length} page${bad.length === 1 ? '' : 's'} did not return HTTP 200 (${bad[0].reason})`)
+  if (pagesInconclusive) issues.push('No page could be fetched, so page status is unknown')
+
+  // 3. X-Robots-Tag from the real response headers
+  const blocked = []
+  for (const p of pages) {
+    const hit = (site.host.headersFor(p.urlPath)['x-robots-tag'] || []).find(v => NOINDEX.test(v.value))
+    if (hit) {
+      blocked.push({ urlPath: p.urlPath, value: hit.value, file: p.url, line: null })
+      findings.push({ file: p.url, line: null, message: `X-Robots-Tag: ${hit.value} response header hides this page from AI search` })
+    }
+  }
+  const headerPoint = pages.length ? (pages.length - blocked.length) / pages.length : 0.5
+  if (blocked.length) issues.push(`X-Robots-Tag "${blocked[0].value}" hides ${blocked.length} page${blocked.length === 1 ? '' : 's'} from AI search`)
+
+  const recs = []
+  if (probe.soft404) recs.push('Answer unknown URLs with HTTP 404 (remove the catch-all 200 fallback or redirect-to-home rule)')
+  if (bad.length) recs.push('fix or remove links and sitemap entries that point at pages returning errors')
+  if (blocked.length) recs.push('remove X-Robots-Tag noindex/none from production responses')
+
+  return {
+    score: probe.point + pagePoint + headerPoint,
+    inconclusive: !!probe.inconclusive || pagesInconclusive,
+    message: issues[0] || 'Correct HTTP behavior: real 404s, 200 pages, no noindex header',
+    findings,
+    recommendation: recs.length ? recs.join('; ') + '.' : '',
+    details: {
+      measured: true,
+      probe: { point: probe.point, url: probeUrl, status: probe.status ?? null, soft404: !!probe.soft404, inconclusive: !!probe.inconclusive, reason: probe.reason, finalUrl: probe.finalUrl ?? null },
+      pages: { checked, notOk: bad, unreachable: unreadable },
+      xRobotsTag: { blocked, blockedByHeader: blocked.length > 0 },
+      issues
+    }
+  }
+}
+
 export default {
   id: 'crawlability.http-behavior',
   scope: 'site',
   run({ site, pages, helpers }) {
+    if (site.live) return runLive(site, pages)
     const rules = redirectRules(site)
     const resolveLocal = helpers?.resolveLocal || (() => null)
     const paths = pages.length ? pages.map(p => ({ urlPath: p.urlPath, file: p.file })) : [{ urlPath: '/', file: null }]

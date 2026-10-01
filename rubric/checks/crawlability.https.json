@@ -79,6 +79,11 @@
       "extension": "Mixed content is checked on the current page only.",
       "plugin": "Site check over every loaded page; any mixed content on any page costs the 0.5 point, one finding per element.",
       "reason": "Site-level audit of all pages; findings group by message across pages."
+    },
+    {
+      "extension": "Reads the scheme of the current tab and scans the page for mixed content.",
+      "plugin": "URL mode measures: 0 when the fetched origin is http://. On https the score is 2 minus 0.5 for mixed content and 0.5 when http:// answers 2xx with content instead of redirecting (floored). The http:// origin is fetched without following redirects; a 3xx with a Location starting https:// counts as a redirect, and an unreachable http:// origin is not penalized. The real Strict-Transport-Security header is reported (recommended, not scored). Host and config predictions are skipped; results are not predicted.",
+      "reason": "Source vs live: URL mode can observe what the repo only predicts."
     }
   ]
 }

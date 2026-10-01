@@ -2,6 +2,7 @@
 
 import { parseRobots, canCrawl } from '../../lib/robots.mjs'
 import { llmsGenerator, robotsGenerator } from '../../lib/sources.mjs'
+import { isUnreachable, responseLabel } from '../../lib/remote.mjs'
 
 const BASE = 5
 const WEIGHT = 6
@@ -31,6 +32,28 @@ export default {
     const llms = site.llmsTxt
     const full = site.llmsFullTxt
     const llmsFullTxt = { exists: !!full, file: full?.path ?? null, fileSizeKB: full ? Math.round((full.text.length / 1024) * 10) / 10 : 0 }
+
+    // URL mode: unreachable is inconclusive; 404 or an HTML fallback is absent
+    if (!llms && site.live) {
+      const res = site.live.response('/llms.txt')
+      if (isUnreachable(res)) {
+        return {
+          score: WEIGHT / 2,
+          inconclusive: true,
+          message: `llms.txt could not be read (${responseLabel(res)})`,
+          findings: [{ file: `${site.live.origin}/llms.txt`, line: null, message: `Fetching /llms.txt answered ${responseLabel(res)}, so whether it exists is unknown` }],
+          recommendation: 'Make sure /llms.txt is reachable for AI assistants (not blocked by bot protection or rate limiting).',
+          details: { exists: null, inconclusive: true, status: res?.status ?? null, error: res?.error ?? null, llmsFullTxt }
+        }
+      }
+      return {
+        score: 0,
+        message: 'llms.txt not found',
+        findings: [{ file: `${site.live.origin}/llms.txt`, line: null, message: `No llms.txt (${res && res.ok ? 'the URL returns an HTML page or is empty' : responseLabel(res)})` }],
+        recommendation: 'Create an llms.txt at the site root with "# Site Name", a "> summary" line and "## Section" lists of [Title](url) links. See https://llmstxt.org/',
+        details: { exists: false, status: res?.status ?? null, llmsFullTxt }
+      }
+    }
 
     if (!llms) {
       const generator = llmsGenerator(site)
@@ -79,7 +102,7 @@ export default {
         issues.push('llms.txt exists but is blocked by robots.txt')
         findings.push({ file: site.robotsTxt.path, line: r.rule.line, message: `"Disallow: ${r.rule.path}" blocks /llms.txt for User-agent: *` })
       }
-    } else if (robotsGenerator(site)) {
+    } else if (site.live ? isUnreachable(site.live.response('/robots.txt')) : robotsGenerator(site)) {
       robotsUnknown = true
     }
 

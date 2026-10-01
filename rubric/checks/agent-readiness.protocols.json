@@ -200,6 +200,11 @@
       "extension": "The page host is the live URL.",
       "plugin": "The page host comes from the site base URL; without one, only relative links (and api./docs. subdomains of nothing) are same-site.",
       "reason": "Source-vs-live."
+    },
+    {
+      "extension": "Probes the discovery URLs live.",
+      "plugin": "URL mode: uses the fetched /.well-known/ paths and /openapi.json (2xx non-HTML answers only) with their real Content-Type; framework route-handler predictions are skipped, so nothing is predicted. When the site shows an API surface, no artifact is found and some discovery paths were unreachable (0, 401, 403, 429, 503, timeout), the result is inconclusive at 3/6 instead of 0. Still na when there is no API or agent surface.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

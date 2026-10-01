@@ -141,6 +141,11 @@
       "extension": "All 126 bots count equally: score = round(allowed / 126 * 12), so blocking GPTBot and ClaudeBot still scores 12/12.",
       "plugin": "Ten major AI search and assistant crawlers (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, Google-Extended, Applebot-Extended) share 9 points and the other 116 share 3: score = round(9 * majorAllowed / 10 + 3 * otherAllowed / 116). Blocking any major bot caps the score at 9 (a warning). The list lives in references/ai-bots.json (major_bots).",
       "reason": "Blocking the crawlers behind ChatGPT, Claude, Perplexity, Gemini and Apple Intelligence is what actually removes a site from AI answers; an obscure scraper should not weigh the same."
+    },
+    {
+      "extension": "Fetches /robots.txt live; an unreachable robots.txt is treated like a missing one.",
+      "plugin": "URL mode (audit of a live URL): parses the fetched /robots.txt. A 404, another non-2xx status or an HTML fallback is absent (8/12). An unreachable answer (status 0, 401, 403, 429, 503, timeout or network error) is inconclusive at half weight (6/12). The robots.txt generator lookup in the repo is skipped. Results are measured, not predicted.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

@@ -109,6 +109,11 @@
       "extension": "Reports whether the current page URL appears in the sitemap (informational).",
       "plugin": "Not reported (site check).",
       "reason": "No current page in a site-level source audit; it never affected the score."
+    },
+    {
+      "extension": "Probes four sitemap URLs live and reads robots.txt.",
+      "plugin": "URL mode: uses the sitemaps fetched from robots.txt Sitemap: lines, /sitemap.xml and /sitemap_index.xml (index files followed). When none is found and any of those URLs or robots.txt was unreachable (0, 401, 403, 429, 503, timeout) the result is inconclusive at half weight, never a fail. A sitemap found while robots.txt is unreachable is not penalized for a missing Sitemap: line (inconclusive). The sitemap generator lookup is skipped.",
+      "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
     }
   ]
 }

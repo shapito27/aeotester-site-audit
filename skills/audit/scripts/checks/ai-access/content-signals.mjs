@@ -2,12 +2,15 @@
 //
 // Source equivalents: robots.txt in the served root, and a Content-Signal
 // header from host config (_headers, vercel.json, netlify.toml) for '/'.
+// URL mode: the fetched robots.txt and the real Content-Signal response
+// header of every audited page (measured, not predicted).
 
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseRobots } from '../../lib/robots.mjs'
 import { robotsGenerator } from '../../lib/sources.mjs'
+import { isUnreachable, responseLabel } from '../../lib/remote.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const BOTS = JSON.parse(readFileSync(join(here, '..', '..', '..', 'references', 'ai-bots.json'), 'utf8')).bots.map(b => b.name.toLowerCase())
@@ -33,7 +36,7 @@ const format = s => KEYS.filter(k => s[k] !== undefined).map(k => `${k}=${s[k]}`
 export default {
   id: 'ai-access.content-signals',
   scope: 'site',
-  run({ site }) {
+  run({ site, pages = [] }) {
     const robots = site.robotsTxt
     const parsed = robots ? parseRobots(robots.text) : null
 
@@ -45,8 +48,10 @@ export default {
       Object.assign(robotsSignals, parseContentSignal(entry.value))
     }
 
-    // Header from host config for the home page
-    const headerEntries = site.host.headersFor('/')['content-signal'] || []
+    // Header from host config for the home page (URL mode: real response
+    // headers of the audited pages, first valid one wins)
+    const headerPaths = site.live ? [...new Set([...pages.map(p => p.urlPath), '/'])] : ['/']
+    const headerEntries = headerPaths.flatMap(p => (site.host.headersFor(p)['content-signal'] || []).map(h => ({ ...h, urlPath: p })))
     const headerEntry = headerEntries.find(h => Object.keys(parseContentSignal(h.value)).length) || headerEntries[0] || null
     const headerSignals = parseContentSignal(headerEntry?.value)
 
@@ -57,7 +62,9 @@ export default {
 
     const agents = new Set((parsed?.groups || []).flatMap(g => g.agents))
     const addressedBots = BOTS.filter(b => agents.has(b))
-    const generator = robots ? null : robotsGenerator(site)
+    const generator = robots || site.live ? null : robotsGenerator(site)
+    const robotsRes = site.live && !robots ? site.live.response('/robots.txt') : null
+    const robotsUnreachable = !!site.live && !robots && isUnreachable(robotsRes)
 
     const details = {
       robotsSignals,
@@ -69,14 +76,15 @@ export default {
       signals: combined,
       aiBotsAddressed: addressedBots.slice(0, 10),
       aiBotsAddressedCount: addressedBots.length,
-      robotsTxtExists: robots ? true : (generator ? null : false),
+      robotsTxtExists: robots ? true : (generator || robotsUnreachable ? null : false),
       robotsFile: robots?.path ?? null
     }
+    if (site.live && headerEntry) details.headerUrlPath = headerEntry.urlPath
 
     if (source) {
       return {
         score: WEIGHT,
-        predicted: source === 'header',
+        predicted: source === 'header' && !site.live,
         message: `Content Signals declared: ${format(combined)}`,
         findings: [],
         details
@@ -92,6 +100,18 @@ export default {
         findings: [],
         recommendation: `Check the live /robots.txt for a Content-Signal line. If there is none: ${RECOMMEND}`,
         details: { ...details, inconclusive: true, generator }
+      }
+    }
+
+    // URL mode: robots.txt could not be fetched and no page sends the header
+    if (robotsUnreachable) {
+      return {
+        score: 2,
+        inconclusive: true,
+        message: `robots.txt could not be read (${responseLabel(robotsRes)}) and no page sends a Content-Signal header`,
+        findings: [{ file: `${site.live.origin}/robots.txt`, line: null, message: `Fetching /robots.txt answered ${responseLabel(robotsRes)}, so a Content-Signal line there is unknown` }],
+        recommendation: `Make sure /robots.txt is reachable for crawlers, then check it for a Content-Signal line. If there is none: ${RECOMMEND}`,
+        details: { ...details, inconclusive: true, status: robotsRes?.status ?? null, error: robotsRes?.error ?? null }
       }
     }
 
@@ -113,7 +133,7 @@ export default {
       message: 'No Content Signals declared',
       findings: robots
         ? [{ file: robots.path, line: 1, message: 'robots.txt has no Content-Signal line' }, ...invalid]
-        : [{ file: null, line: null, message: 'No robots.txt, so no Content-Signal is declared' }],
+        : [{ file: site.live ? `${site.live.origin}/robots.txt` : null, line: null, message: 'No robots.txt, so no Content-Signal is declared' }],
       recommendation: robots ? RECOMMEND : `Create robots.txt at the site root. ${RECOMMEND}`,
       details
     }

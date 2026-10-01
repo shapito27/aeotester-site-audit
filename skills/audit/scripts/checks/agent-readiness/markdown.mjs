@@ -6,10 +6,15 @@
 // "Accept: text/markdown" (e.g. Cloudflare Markdown for Agents, a dashboard
 // toggle) cannot be seen in the repo, so every result below 5 is flagged
 // inconclusive with a live command to verify.
+//
+// URL mode measures instead: each page (up to 20) was fetched again with
+// "Accept: text/markdown", and advertised markdown alternates were fetched.
+// Negotiation that was tested and failed is a real 0, not inconclusive.
 
 import { readdirSync } from 'node:fs'
 import { join, posix } from 'node:path'
 import { readText, toPosix } from '../../lib/site.mjs'
+import { isUnreachable, responseLabel, markdownAlternates } from '../../lib/remote.mjs'
 
 const ALT_SELECTOR = 'link[rel~="alternate"][type="text/markdown"], link[rel~="alternate"][type="text/x-markdown"]'
 
@@ -97,10 +102,121 @@ function resolvesLocally(href, pageUrl, helpers) {
   }
 }
 
+const MARKDOWN_TYPE = /text\/(x-)?markdown/i
+const LIVE_REC = 'Answer "Accept: text/markdown" with a Markdown version and Content-Type: text/markdown (Cloudflare offers this as "Markdown for Agents", or use edge middleware), and advertise it with <link rel="alternate" type="text/markdown" href="..."> or a Link header.'
+
+// URL mode: advertised alternates with the live response for each target
+function liveAlternates(site, page) {
+  const headers = {}
+  for (const [k, v] of Object.entries(site.host.headersFor(page.urlPath))) headers[k] = v.map(h => h.value).join(', ')
+  return markdownAlternates(page.doc, headers, page.url).map(a => {
+    let res = null
+    try {
+      const u = new URL(a.url)
+      if (u.origin === site.live.origin) res = site.live.response(u.pathname + u.search)
+    } catch {
+      res = null
+    }
+    return { ...a, res, works: !!res && res.ok && !/text\/html|application\/xhtml/i.test(res.contentType) && !/^\s*<(!doctype|html)/i.test(res.text || '') }
+  })
+}
+
+function runLive(site, page) {
+  const { doc, urlPath } = page
+  const file = page.url
+  const headLine = doc.head?.line ?? 1
+  const probed = site.live.markdown.has(urlPath)
+  const res = probed ? site.live.markdown.get(urlPath) : null
+  const negotiated = !!res && res.ok && MARKDOWN_TYPE.test(res.contentType)
+  const alternates = liveAlternates(site, page)
+  const working = alternates.find(a => a.works)
+  const broken = alternates.find(a => a.res && !a.works && !isUnreachable(a.res))
+  const unverified = alternates.find(a => !a.res || isUnreachable(a.res))
+  const details = {
+    measured: true,
+    probed,
+    negotiation: !probed ? 'not tested' : negotiated ? 'yes' : isUnreachable(res) ? 'unreachable' : 'no',
+    negotiationStatus: res?.status ?? null,
+    negotiationContentType: res?.contentType || null,
+    alternates: alternates.map(a => ({ url: a.url, via: a.via, status: a.res?.status ?? null, works: a.works })),
+    verify: `curl -sI -H "Accept: text/markdown" ${page.url}`
+  }
+
+  if (negotiated) {
+    return { score: 5, message: 'Serves Markdown via content negotiation (Accept: text/markdown)', findings: [], recommendation: '', details }
+  }
+  const altFinding = a => ({ file, line: a.via === 'link' ? (doc.querySelector(ALT_SELECTOR)?.line ?? headLine) : null, message: '' })
+  const tested = probed && !isUnreachable(res)
+  if (working) {
+    return {
+      score: 3,
+      inconclusive: !tested,
+      message: tested ? 'Markdown alternate is advertised, but the page does not answer "Accept: text/markdown"' : 'Markdown alternate is advertised and resolves; negotiation could not be tested on this page',
+      findings: tested ? [{ ...altFinding(working), message: `Markdown alternate ${working.url} works, but a request with "Accept: text/markdown" got ${res.contentType || 'no content type'} (HTTP ${res.status})` }] : [],
+      recommendation: tested ? 'Make the host answer "Accept: text/markdown" with Content-Type: text/markdown (Cloudflare "Markdown for Agents", or edge middleware serving the .md file).' : `Check live with ${details.verify}.`,
+      details
+    }
+  }
+  if (probed && isUnreachable(res)) {
+    return {
+      score: 5 / 2,
+      inconclusive: true,
+      message: `Markdown negotiation could not be tested (${responseLabel(res)})`,
+      findings: [{ file, line: null, message: `The request with "Accept: text/markdown" answered ${responseLabel(res)}` }],
+      recommendation: `Check live with ${details.verify}.`,
+      details
+    }
+  }
+  if (unverified) {
+    return {
+      score: 3,
+      inconclusive: true,
+      message: 'Markdown alternate is advertised; its target could not be checked',
+      findings: [{ ...altFinding(unverified), message: `Markdown alternate ${unverified.url} ${unverified.res ? `answered ${responseLabel(unverified.res)}` : 'was not fetched (another origin or over the fetch limit)'}` }],
+      recommendation: `Check the alternate URL and ${details.verify}.`,
+      details
+    }
+  }
+  const findings = []
+  if (broken) findings.push({ ...altFinding(broken), message: `Advertised markdown alternate ${broken.url} answers ${responseLabel(broken.res)}${broken.res.ok ? ' with HTML' : ''}` })
+  if (!probed) {
+    // Beyond the pages probed with "Accept: text/markdown": nothing found on
+    // the page itself, but negotiation may still work
+    const otherWorks = [...site.live.markdown.values()].some(r => r && r.ok && MARKDOWN_TYPE.test(r.contentType))
+    if (otherWorks) {
+      return {
+        score: 5,
+        predicted: true,
+        message: 'Other pages on this host serve Markdown via content negotiation (not tested on this page)',
+        findings,
+        recommendation: '',
+        details
+      }
+    }
+    return {
+      score: 5 / 2,
+      inconclusive: true,
+      message: 'No Markdown alternate advertised; negotiation was not tested on this page',
+      findings: [...findings, { file, line: headLine, message: `No markdown alternate advertised. Check live with ${details.verify}` }],
+      recommendation: LIVE_REC,
+      details
+    }
+  }
+  findings.push({ file, line: headLine, message: `A request with "Accept: text/markdown" got ${res.contentType || 'no content type'} (HTTP ${res.status}) and no working markdown alternate is advertised` })
+  return {
+    score: 0,
+    message: 'No Markdown representation for agents: "Accept: text/markdown" returns HTML',
+    findings,
+    recommendation: LIVE_REC,
+    details
+  }
+}
+
 export default {
   id: 'agent-readiness.markdown',
   scope: 'page',
   run({ site, page, helpers }) {
+    if (site.live) return runLive(site, page)
     const { doc, file, urlPath } = page
     const negotiation = findNegotiationEvidence(site)
     const altEl = doc.querySelector(ALT_SELECTOR)
