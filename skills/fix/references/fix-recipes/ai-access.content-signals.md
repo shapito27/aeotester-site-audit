@@ -1,4 +1,6 @@
-# Content Signals (`ai-access.content-signals`, 3 pts, auto)
+# Content Signals (`ai-access.content-signals`, advice, not scored, auto)
+
+This check is advisory: it never costs points, so apply it only when the user asks (`/aeotester:fix ai-access.content-signals`). A missing line leaves AI use unrestricted, which can be what the owner wants.
 
 ## What the audit flags
 
@@ -10,7 +12,7 @@
 | Content-Signal line has no valid key=yes\|no pair | Use only `search`, `ai-input`, `ai-train` with `yes` or `no` |
 | robots.txt is generated, Content Signals could not be read (2/3, inconclusive) | Add the line in the generator, build, re-run |
 
-Full points: at least one valid `key=yes|no` pair in robots.txt, or a `Content-Signal` response header for `/` in host config (header-only counts as predicted).
+Pass: at least one valid `key=yes|no` pair in robots.txt, or a `Content-Signal` response header for `/` in host config (header-only counts as predicted).
 
 ## Where to edit
 

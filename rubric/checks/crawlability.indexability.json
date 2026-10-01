@@ -15,8 +15,14 @@
     "host config X-Robots-Tag for the page path (_headers, vercel.json, netlify.toml via site.host.headersFor)"
   ],
   "scoring": {
-    "summary": "Three sub-checks run first. If any critical issue exists (noindex/none in a robots or *bot* meta tag or in a configured X-Robots-Tag header, a soft 404, or a canonical on a different hostname when the site base URL is known) the score is 0. Otherwise score = 8 minus the canonical penalty (none or no valid href 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0. Directives are whole comma/space-separated tokens. A result that depends on an X-Robots-Tag header is marked predicted.",
+    "summary": "Plugin: a page kept out of search on purpose (noindex for all crawlers, i.e. meta name=robots or an X-Robots-Tag without a user-agent prefix; not the homepage; not listed in a sitemap that was read, following sitemap indexes to their children; more than one page audited) scores full and is left out of every page check average by the engine. Otherwise: Three sub-checks run first. If any critical issue exists (noindex/none in a robots or *bot* meta tag or in a configured X-Robots-Tag header on the homepage, on the only audited page, or on a page listed in the sitemap, a soft 404, or a canonical on a different hostname when the site base URL is known) the score is 0. Otherwise score = 8 minus the canonical penalty (none or no valid href 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0. Directives are whole comma/space-separated tokens. A result that depends on an X-Robots-Tag header is marked predicted.",
     "rules": [
+      {
+        "condition": "noindex for all crawlers (meta name=robots, or X-Robots-Tag without a user-agent prefix) AND not the homepage AND the page is not in any sitemap read, following sitemap indexes (or there is none) AND more than one page is audited",
+        "points": 8,
+        "status": "pass",
+        "note": "Kept out of search on purpose; the engine excludes the page from all page check averages and lists it in the report."
+      },
       {
         "condition": "canonical: no link[rel=\"canonical\"], or exactly one with an empty/unparseable href",
         "points": "-1",
@@ -45,7 +51,7 @@
         "canonical_status": "warning"
       },
       {
-        "condition": "noindex: any meta[name*=\"bot\" i] (robots, googlebot, GPTBot, ...) or X-Robots-Tag header rule for the page path (also the path without .html) has a directive token 'noindex' or 'none'. Tokens are split on ',' and whitespace; 'max-snippet:', 'max-image-preview:', 'max-video-preview:', 'unavailable_after:' parameters are ignored and a 'ua:' prefix is stripped",
+        "condition": "noindex: any meta[name*=\"bot\" i] (robots, googlebot, GPTBot, ...) or X-Robots-Tag header rule for the page path (also the path without .html) has a directive token 'noindex' or 'none'. Tokens are split on ',' and whitespace; 'max-snippet:', 'max-image-preview:', 'max-video-preview:', 'unavailable_after:' parameters are ignored and a 'ua:' prefix is stripped - only on the homepage, the only audited page, or a page listed in the sitemap (conflict)",
         "status": "fail",
         "points": 0,
         "critical": true,
@@ -94,7 +100,7 @@
   },
   "fixable": "auto",
   "fix_recipe": "fix-recipes/crawlability.indexability.md",
-  "fix_summary": "Emit exactly one self-referencing absolute canonical per page on the production host (Astro layout <link rel=\"canonical\" href={new URL(Astro.url.pathname, Astro.site)}>, Hugo {{ .Permalink }}, Eleventy site.url + page.url, Next.js metadataBase + alternates.canonical), and remove noindex/nofollow/none from production robots meta (Next.js metadata.robots). Soft-404 fixes (thin content, error words in titles) need user content and are assisted.",
+  "fix_summary": "Emit exactly one self-referencing absolute canonical per page on the production host (Astro layout <link rel=\"canonical\" href={new URL(Astro.url.pathname, Astro.site)}>, Hugo {{ .Permalink }}, Eleventy site.url + page.url, Next.js metadataBase + alternates.canonical), and resolve noindex conflicts: noindex on the homepage, or a noindex page listed in the sitemap (remove it from the sitemap if it should stay out of search, or remove noindex). Deliberate noindex on legal and thank-you pages is left alone. Soft-404 fixes (thin content, error words in titles) need user content and are assisted.",
   "stacks": [
     "static-html",
     "astro",
@@ -152,6 +158,11 @@
       "extension": "Reads meta robots from the DOM only.",
       "plugin": "URL mode: X-Robots-Tag comes from the page's real response header, so a noindex there is measured (predicted false) and its finding points at the page URL with no line. No host config file is read for header line numbers.",
       "reason": "Source vs live: URL mode can observe what the repo only predicts."
+    },
+    {
+      "extension": "Any noindex directive is a critical issue scoring 0 on the page being checked.",
+      "plugin": "A page with a noindex for all crawlers that is not the homepage and not in the sitemap is deliberate: full score, and the engine leaves it out of every page check average. noindex scores 0 on the homepage, on the only audited page, when the sitemap lists the page, and when it targets one crawler only (googlebot, GPTBot), which leaves the page visible to others.",
+      "reason": "The plugin averages many pages; legal and thank-you pages kept out of search on purpose were scored as if they should rank, costing points on indexability, schema, meta tags, freshness and author."
     }
   ]
 }

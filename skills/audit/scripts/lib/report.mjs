@@ -1,6 +1,6 @@
 // Renders an audit result as the aeotester-report.md Markdown report.
 
-const STATUS_ICON = { pass: 'PASS', warning: 'WARN', fail: 'FAIL', na: 'N/A', skipped: 'SKIP' }
+const STATUS_ICON = { pass: 'PASS', warning: 'WARN', fail: 'FAIL', na: 'N/A', skipped: 'SKIP', advice: 'ADVICE' }
 const FIX_LABEL = { auto: 'auto-fix', assisted: 'assisted', 'report-only': 'report only' }
 const MAX_LOCATIONS = 5
 
@@ -48,11 +48,20 @@ export function renderReport(site, audit, options = {}) {
     return L.join('\n')
   }
 
-  const scoreLine = site.mode === 'report-only'
+  // --only with advisory checks alone: nothing is scored
+  const adviceOnly = audit.available === 0 && audit.checks.some(c => c.advisory)
+  const scoreLine = adviceOnly
+    ? '**No score: only advice checks ran.** Advice costs no points.'
+    : site.mode === 'report-only'
     ? `**Partial score: ${audit.total} / ${audit.available}** (only checks that can run on repo files; page checks need a live URL)`
     : `**Score: ${audit.total} / ${audit.available} (${audit.percentage}%) - ${audit.grade}**`
   L.push('## Summary', '', scoreLine, '')
   if (audit.naWeight) L.push(`${audit.naWeight} points do not apply to this site and are left out of the total (max ${audit.maxScore}).`, '')
+  const excluded = audit.excludedPages || []
+  if (excluded.length) {
+    const names = excluded.map(p => `\`${p.url || p.file}\``)
+    L.push(`Not scored: ${excluded.length} page(s) kept out of search on purpose (${excluded[0].reason}): ${names.slice(0, 10).join(', ')}${names.length > 10 ? ` and ${names.length - 10} other pages` : ''}. They do not need to rank, so page checks leave them out.`, '')
+  }
 
   L.push('| Category | Score |', '|---|---:|')
   for (const c of audit.categories) {
@@ -86,10 +95,28 @@ export function renderReport(site, audit, options = {}) {
     L.push('')
   }
 
+  const advice = audit.checks.filter(c => c.advice?.length || c.status === 'advice')
+  if (advice.length) {
+    L.push('## Advice (no points)', '')
+    L.push('Worth knowing, but not scored: these can be deliberate choices.', '')
+    for (const c of advice) {
+      L.push(`### ${c.name}`, '', `\`${c.id}\``, '')
+      for (const f of c.advice.slice(0, 8)) {
+        const where = f.locations.slice(0, MAX_LOCATIONS).map(loc).join(', ')
+        const more = f.locations.length > MAX_LOCATIONS ? ` and ${f.locations.length - MAX_LOCATIONS} more` : ''
+        L.push(`- ${esc(f.message)}${where ? ` - ${where}${more}` : ''}`)
+      }
+      if (c.advice.length > 8) L.push(`- ...and ${c.advice.length - 8} more`)
+      if (c.status === 'advice' && c.recommendation) L.push('', `Suggestion: ${esc(c.recommendation)}`)
+      L.push('')
+    }
+  }
+
   L.push('## All checks', '')
   L.push('| Check | Status | Score | Fix |', '|---|---|---:|---|')
   for (const c of audit.checks) {
-    L.push(`| ${c.name} | ${STATUS_ICON[c.status]} | ${c.status === 'na' || c.status === 'skipped' ? '-' : `${c.score} / ${c.weight}`} | ${FIX_LABEL[c.fixable]} |`)
+    const points = c.status === 'na' || c.status === 'skipped' ? '-' : c.advisory ? 'not scored' : `${c.score} / ${c.weight}`
+    L.push(`| ${c.name} | ${STATUS_ICON[c.status]} | ${points} | ${FIX_LABEL[c.fixable]} |`)
   }
   L.push('')
 
@@ -137,8 +164,15 @@ export function renderSummary(site, audit) {
     .sort((a, b) => b.lost - a.lost)
     .slice(0, 5)
     .map(c => `- ${c.name}: -${c.lost} (${FIX_LABEL[c.fixable]})`)
-  const head = site.mode === 'report-only'
+  const head = audit.available === 0 && audit.checks.some(c => c.advisory)
+    ? `Advice only, no score: ${audit.checks.map(c => `${c.name} ${c.status}`).join(', ')}`
+    : site.mode === 'report-only'
     ? `Partial score ${audit.total}/${audit.available} (report-only: ${site.stack.id})`
     : `AEO score ${audit.total}/${audit.available} (${audit.percentage}%, ${audit.grade})`
-  return [head, ...worst].join('\n')
+  const extra = []
+  const excluded = audit.excludedPages?.length || 0
+  if (excluded) extra.push(`Not scored: ${excluded} page(s) kept out of search on purpose (noindex)`)
+  const advice = audit.checks.filter(c => c.advice?.length || c.status === 'advice').map(c => c.name)
+  if (advice.length) extra.push(`Advice, no points: ${advice.join(', ')}`)
+  return [head, ...worst, ...extra].join('\n')
 }

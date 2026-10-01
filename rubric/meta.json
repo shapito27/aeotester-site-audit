@@ -1,7 +1,7 @@
 {
   "$schema": "./rubric.schema.json",
   "name": "AEOTester AEO rubric",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "CC-BY-4.0",
   "attribution": "AEOTester (https://aeotester.com). Reuse requires attribution - see LICENSE-RUBRIC.",
   "source": {
@@ -35,7 +35,10 @@
         "min": 0,
         "label": "Not AEO Ready"
       }
-    ]
+    ],
+    "advisory": "A check with advisory: true is reported as advice and never scored. Its weight is left out of max_score and the category max.",
+    "excluded_pages": "Pages kept out of search on purpose (noindex for all crawlers, not the homepage, not in the sitemap, more than one page audited) are left out of every page check average. Their freshness and author attribution findings are reported as advice. If every page would be excluded, none is.",
+    "advice": "Checks may report advice: findings worth knowing that cost no points."
   },
   "stacks": {
     "static-html": {

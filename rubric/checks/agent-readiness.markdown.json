@@ -3,7 +3,7 @@
   "extension_key": "markdownForAgents",
   "name": "Markdown for Agents",
   "category": "agent-readiness",
-  "weight": 5,
+  "weight": 3,
   "conditional": false,
   "description": "Checks whether the page offers a Markdown representation to AI agents: via HTTP content negotiation (Accept: text/markdown), an advertised alternate (<link rel=alternate type=text/markdown> or Link header), or an undiscoverable .md sibling file. Markdown gives agents the same content at a fraction of the tokens of HTML.",
   "inputs": [
@@ -12,7 +12,7 @@
     "HTTP GET of .md probe URL (1500 ms timeout)"
   ],
   "scoring": {
-    "summary": "Tiered, first match wins: (1) server/edge code or host config in the repo that branches on the Accept header and returns text/markdown -> 5 (predicted); (2) the page has <link rel=alternate type=text/markdown|text/x-markdown> or host config sets a Link header value with both rel=alternate and a markdown type -> 3; (3) a non-HTML .md file for the page exists in the served root -> 2 (predicted); (4) otherwise 0. Every result below 5 is inconclusive: CDN-level negotiation (e.g. Cloudflare Markdown for Agents) cannot be seen in the repo.",
+    "summary": "Plugin scale (weight 3), tiered, first match wins: (1) server/edge code or host config in the repo that branches on the Accept header and returns text/markdown -> 3 (predicted); (2) the page has <link rel=alternate type=text/markdown|text/x-markdown> or host config sets a Link header value with both rel=alternate and a markdown type -> 3, with content negotiation reported as advice; an advertised <link> whose target is not in the site (and no Link header) -> 0, as a measured broken alternate is in URL mode; (3) a non-HTML .md file for the page exists in the served root but is not advertised -> 1 (predicted); (4) otherwise 0 (inconclusive in repo mode: CDN-level negotiation such as Cloudflare Markdown for Agents cannot be seen in the repo). URL mode measures negotiation and fetches the advertised alternates: a working alternate -> 3, negotiation answered -> 3, nothing and HTML for Accept: text/markdown -> 0, a probe that could not be read -> 1 inconclusive.",
     "rules": [
       {
         "condition": "md paths: '/' -> '/index.md'; '/x.html' or '/x.htm' -> '/x.md'; '/dir/' -> '/dir.md' and '/dir/index.md'; other last segment with a dot -> none; else path + '.md'",
@@ -21,17 +21,18 @@
       {
         "condition": "a file among middleware.(js|ts), src/middleware.*, _worker.js, worker.js, src/worker.*, src/index.ts, server.(js|mjs|ts), code under functions/, netlify/edge-functions/, middleware/, src/middleware/, workers/, src/workers/, server/, or vercel.json / netlify.toml / nginx.conf / Caddyfile / wrangler.toml contains 'text/markdown' and the word 'accept' (not Accept-*)",
         "status": "pass",
-        "points": 5,
+        "points": 3,
         "predicted": true
       },
       {
         "condition": "page has link[rel~=\"alternate\"][type=\"text/markdown\"] or [type=\"text/x-markdown\"], OR a Link header value configured for the page path (_headers, netlify.toml, vercel.json) that itself has a markdown type and rel alternate",
         "points": 3,
-        "inconclusive": true
+        "inconclusive": true,
+        "note": "Full points. Answering Accept: text/markdown on top is reported as advice. An advertised <link> whose target does not resolve in the site (and no Link header) scores 0 (inconclusive)."
       },
       {
         "condition": "a file at one of the md paths exists in the served root, its body does not start with <!doctype or <html, and host config does not give it an HTML Content-Type",
-        "points": 2,
+        "points": 1,
         "inconclusive": true,
         "predicted": true
       },
@@ -41,7 +42,7 @@
         "inconclusive": true
       }
     ],
-    "status_mapping": "5 pass; otherwise inconclusive, so the engine reports warning for 3, 2 and 0.",
+    "status_mapping": "3 pass (negotiation or a working advertised alternate); 1 or 0 fail. Repo-mode 0 is inconclusive.",
     "inconclusive": "Whether the host answers Accept: text/markdown cannot be seen in the repo when it is a CDN setting, so every result below 5 is inconclusive and the finding gives the curl command to verify live. The score still reflects what the repo shows."
   },
   "detect": {
@@ -56,7 +57,7 @@
   },
   "fixable": "assisted",
   "fix_recipe": "fix-recipes/agent-readiness.markdown.md",
-  "fix_summary": "Auto-add <link rel=\"alternate\" type=\"text/markdown\" href=\"/page.md\"> to the head template (or Next.js metadata.alternates.types) and a Link header via _headers / netlify.toml / vercel.json, plus generate .md copies of pages at build time; this reaches 3/5. Full 5/5 needs server or edge content negotiation (Cloudflare Markdown for Agents toggle, a Pages/_middleware or Next.js middleware that returns text/markdown for Accept: text/markdown), which the user must enable or approve.",
+  "fix_summary": "Generate .md copies of pages at build time and advertise them with <link rel=\"alternate\" type=\"text/markdown\" href=\"/page.md\"> in the head template (or Next.js metadata.alternates.types) or a Link header via _headers / netlify.toml / vercel.json; this reaches 3/3. Content negotiation for Accept: text/markdown (Cloudflare Markdown for Agents, Pages/_middleware or Next.js middleware) is optional advice.",
   "stacks": [
     "static-html",
     "astro",
@@ -102,6 +103,11 @@
       "extension": "Requests the page with Accept: text/markdown and checks for a markdown alternate.",
       "plugin": "URL mode measures: the first 20 pages are fetched again with Accept: text/markdown, and advertised markdown alternates (<link rel=alternate type=text/markdown> or a Link header) are fetched. 5 when the page answers 2xx with Content-Type text/markdown; 3 when negotiation fails but an advertised alternate answers 2xx with non-HTML content; otherwise 0, not inconclusive, because negotiation was tested. An unreachable negotiation request (0, 401, 403, 429, 503, timeout) is inconclusive at half weight, and an advertised alternate that could not be fetched is 3, inconclusive. Pages beyond the 20 probed are judged from their own <link>/Link header (3, inconclusive), else 5 predicted when another probed page negotiated, else half weight inconclusive rather than 0. Repo evidence and .md file lookups are skipped.",
       "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
+    },
+    {
+      "extension": "Weight 5: negotiation 5, advertised alternate 3, undiscoverable .md file 2, nothing 0.",
+      "plugin": "Weight 3: negotiation 3, a working advertised alternate 3 (negotiation becomes advice), an undiscoverable .md file 1, a broken advertised alternate or nothing 0.",
+      "reason": "Few agents send Accept: text/markdown yet; a linked Markdown copy is what agents can actually discover. Markdown for agents is an emerging practice, so it weighs the same as Open Graph rather than more."
     }
   ]
 }

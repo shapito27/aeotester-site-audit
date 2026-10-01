@@ -23,12 +23,14 @@ if (missing.length || extra.length) throw new Error(`check_order mismatch. missi
 
 const { check_order: order, categories, ...rest } = meta
 const checks = order.map(id => byId.get(id))
+// Advisory checks are reported as advice and never scored
+const scored = checks.filter(c => !c.advisory)
 const rubric = {
   ...rest,
-  max_score: checks.reduce((s, c) => s + c.weight, 0),
+  max_score: scored.reduce((s, c) => s + c.weight, 0),
   categories: categories.map(c => ({
     ...c,
-    max: checks.filter(k => k.category === c.id).reduce((s, k) => s + k.weight, 0)
+    max: scored.filter(k => k.category === c.id).reduce((s, k) => s + k.weight, 0)
   })),
   checks
 }
@@ -42,5 +44,5 @@ if (process.argv.includes('--check')) {
   console.log('rubric.json is up to date')
 } else {
   writeFileSync(out, text)
-  console.log(`built rubric.json: ${checks.length} checks, ${rubric.max_score} points`)
+  console.log(`built rubric.json: ${checks.length} checks (${checks.length - scored.length} advisory), ${rubric.max_score} points`)
 }

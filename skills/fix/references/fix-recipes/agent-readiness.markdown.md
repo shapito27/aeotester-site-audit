@@ -1,14 +1,15 @@
-# Markdown for Agents (`agent-readiness.markdown`, 5 pts, assisted)
+# Markdown for Agents (`agent-readiness.markdown`, 3 pts, assisted)
 
 ## What the audit flags
 
 | Finding | Change |
 |---|---|
-| No markdown alternate, Link header or .md file for this page | Publish a `.md` copy and advertise it (0 pts) |
-| Markdown version `/page.md` exists but is not advertised | Add `<link rel="alternate" type="text/markdown">` or a Link header (2 pts until then) |
-| Markdown alternate advertised, but no `Accept: text/markdown` handling found | Enable content negotiation at the host or edge (3 pts until then) |
+| No markdown alternate, Link header or .md file for this page | Publish a `.md` copy and advertise it (0 pts until then) |
+| Markdown version `/page.md` exists but is not advertised | Add `<link rel="alternate" type="text/markdown">` or a Link header (1 pt until then) |
+| Advertised markdown alternate `/page.md` was not found in the site | Publish the `.md` copy at that path, or fix the href (0 pts until then) |
+| Advice: optional, also answer `Accept: text/markdown` | Content negotiation at the host or edge; no points, only if the user asks |
 
-Tiers: negotiation code in the repo = 5, advertised alternate (`<link>` or Link header) = 3, unadvertised `.md` file = 2, nothing = 0. The `.md` path for `/guide/` is `/guide.md` or `/guide/index.md`; for `/` it is `/index.md`; for `/page.html` it is `/page.md`. Every result below 5 is inconclusive, because a host toggle (Cloudflare Markdown for Agents) is invisible in the repo.
+Tiers: negotiation code in the repo = 3, advertised alternate (`<link>` or Link header) whose target exists = 3, unadvertised `.md` file = 1, advertised alternate with a missing target or nothing = 0. The `.md` path for `/guide/` is `/guide.md` or `/guide/index.md`; for `/` it is `/index.md`; for `/page.html` it is `/page.md`. A repo-mode 0 is inconclusive, because a host toggle (Cloudflare Markdown for Agents) is invisible in the repo.
 
 ## Where to edit
 
@@ -28,8 +29,8 @@ For generated stacks, fix the source that produced the built page, never the bui
 1. From `page-facts.mjs`, read each flagged page's `urlPath`, `title`, `file` and `site.hostConfig`, `site.stack`.
 2. Generate `.md` copies (auto part): for Markdown-sourced stacks, output the existing source body with a `# Title` line at the top; for HTML-only pages, convert the main content to clean Markdown. Serve them as `text/markdown`, not HTML.
 3. Advertise (auto part): add one `<link rel="alternate" type="text/markdown" href="...">` per page in the head template, pointing at a path that really exists. Optionally add a Link header rule on the detected host.
-4. Negotiation (assisted part): explain the options and let the user choose: turn on Cloudflare "Markdown for Agents" in the dashboard (no code), or add edge middleware (Cloudflare Pages `functions/_middleware.js`, Netlify edge function, Next.js `middleware.ts`) that returns the `.md` file when `Accept` includes `text/markdown`. Write middleware only after the user's OK.
-5. Verify live after deploy: `curl -sI -H "Accept: text/markdown" <page url>` should show `content-type: text/markdown`.
+4. Negotiation (optional advice, no points): only if the user asks, explain the options and let them choose: turn on Cloudflare "Markdown for Agents" in the dashboard (no code), or add edge middleware (Cloudflare Pages `functions/_middleware.js`, Netlify edge function, Next.js `middleware.ts`) that returns the `.md` file when `Accept` includes `text/markdown`. Write middleware only after the user's OK.
+5. Verify live after deploy: the `.md` URL should answer with Markdown, not HTML. If negotiation was added, `curl -sI -H "Accept: text/markdown" <page url>` should show `content-type: text/markdown`.
 
 ## Template
 

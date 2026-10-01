@@ -1,15 +1,17 @@
-// agent-readiness.markdown - port of the extension's markdown-for-agents-checker.js (5 pts)
+// agent-readiness.markdown - port of the extension's markdown-for-agents-checker.js
+// (5 pts there, 3 in the plugin)
 //
-// Tiers, first match wins: negotiation evidence in the repo (5, predicted),
-// a markdown alternate advertised by <link> or a Link header (3), a .md file
-// served next to the page (2), nothing (0). Whether the host or CDN answers
-// "Accept: text/markdown" (e.g. Cloudflare Markdown for Agents, a dashboard
-// toggle) cannot be seen in the repo, so every result below 5 is flagged
-// inconclusive with a live command to verify.
+// Tiers, first match wins: negotiation evidence in the repo (3, predicted), a
+// markdown alternate advertised by <link> or a Link header (3), a .md file
+// served next to the page but not advertised (1), an advertised alternate whose
+// target is missing (0, like URL mode), nothing (0). Answering "Accept: text/markdown" on top of
+// an advertised copy is advice, not points: few agents send that header yet,
+// and the linked copy is what they can find. Whether the host or CDN negotiates
+// (e.g. Cloudflare Markdown for Agents) cannot be seen in the repo.
 //
 // URL mode measures instead: each page (up to 20) was fetched again with
 // "Accept: text/markdown", and advertised markdown alternates were fetched.
-// Negotiation that was tested and failed is a real 0, not inconclusive.
+// Negotiation that was tested and failed with no working alternate is a real 0.
 
 import { readdirSync } from 'node:fs'
 import { join, posix } from 'node:path'
@@ -103,6 +105,11 @@ function resolvesLocally(href, pageUrl, helpers) {
 }
 
 const MARKDOWN_TYPE = /text\/(x-)?markdown/i
+// Plugin divergence: worth 3, not 5, and a Markdown copy that the page links
+// to earns full points. Few agents send "Accept: text/markdown" today, so
+// content negotiation is advice on top, not a requirement.
+const WEIGHT = 3
+const NEGOTIATION_ADVICE = 'Optional: also answer "Accept: text/markdown" requests with the Markdown copy (Cloudflare "Markdown for Agents", or edge middleware serving the .md file)'
 const LIVE_REC = 'Answer "Accept: text/markdown" with a Markdown version and Content-Type: text/markdown (Cloudflare offers this as "Markdown for Agents", or use edge middleware), and advertise it with <link rel="alternate" type="text/markdown" href="..."> or a Link header.'
 
 // URL mode: advertised alternates with the live response for each target
@@ -143,23 +150,23 @@ function runLive(site, page) {
   }
 
   if (negotiated) {
-    return { score: 5, message: 'Serves Markdown via content negotiation (Accept: text/markdown)', findings: [], recommendation: '', details }
+    return { score: WEIGHT, message: 'Serves Markdown via content negotiation (Accept: text/markdown)', findings: [], recommendation: '', details }
   }
   const altFinding = a => ({ file, line: a.via === 'link' ? (doc.querySelector(ALT_SELECTOR)?.line ?? headLine) : null, message: '' })
   const tested = probed && !isUnreachable(res)
   if (working) {
     return {
-      score: 3,
-      inconclusive: !tested,
-      message: tested ? 'Markdown alternate is advertised, but the page does not answer "Accept: text/markdown"' : 'Markdown alternate is advertised and resolves; negotiation could not be tested on this page',
-      findings: tested ? [{ ...altFinding(working), message: `Markdown alternate ${working.url} works, but a request with "Accept: text/markdown" got ${res.contentType || 'no content type'} (HTTP ${res.status})` }] : [],
-      recommendation: tested ? 'Make the host answer "Accept: text/markdown" with Content-Type: text/markdown (Cloudflare "Markdown for Agents", or edge middleware serving the .md file).' : `Check live with ${details.verify}.`,
+      score: WEIGHT,
+      message: 'Markdown copy is linked from the page and works',
+      findings: [],
+      advice: tested ? [{ ...altFinding(working), message: `${NEGOTIATION_ADVICE}. Markdown copy ${working.url} works; a request with "Accept: text/markdown" got ${res.contentType || 'no content type'} (HTTP ${res.status})` }] : [],
+      recommendation: '',
       details
     }
   }
   if (probed && isUnreachable(res)) {
     return {
-      score: 5 / 2,
+      score: WEIGHT / 2,
       inconclusive: true,
       message: `Markdown negotiation could not be tested (${responseLabel(res)})`,
       findings: [{ file, line: null, message: `The request with "Accept: text/markdown" answered ${responseLabel(res)}` }],
@@ -169,7 +176,7 @@ function runLive(site, page) {
   }
   if (unverified) {
     return {
-      score: 3,
+      score: WEIGHT,
       inconclusive: true,
       message: 'Markdown alternate is advertised; its target could not be checked',
       findings: [{ ...altFinding(unverified), message: `Markdown alternate ${unverified.url} ${unverified.res ? `answered ${responseLabel(unverified.res)}` : 'was not fetched (another origin or over the fetch limit)'}` }],
@@ -185,7 +192,7 @@ function runLive(site, page) {
     const otherWorks = [...site.live.markdown.values()].some(r => r && r.ok && MARKDOWN_TYPE.test(r.contentType))
     if (otherWorks) {
       return {
-        score: 5,
+        score: WEIGHT,
         predicted: true,
         message: 'Other pages on this host serve Markdown via content negotiation (not tested on this page)',
         findings,
@@ -194,7 +201,7 @@ function runLive(site, page) {
       }
     }
     return {
-      score: 5 / 2,
+      score: WEIGHT / 2,
       inconclusive: true,
       message: 'No Markdown alternate advertised; negotiation was not tested on this page',
       findings: [...findings, { file, line: headLine, message: `No markdown alternate advertised. Check live with ${details.verify}` }],
@@ -240,7 +247,7 @@ export default {
 
     if (negotiation.length) {
       return {
-        score: 5,
+        score: WEIGHT,
         predicted: true,
         message: 'Serves Markdown via content negotiation (from server/edge code, unverified)',
         findings: [],
@@ -250,20 +257,33 @@ export default {
     }
 
     const headLine = doc.head?.line ?? 1
+    // An alternate whose target is not in the site is a broken link, unless a
+    // Link header (host config) also advertises one
+    if (altEl && !linkHeader && details.domAlternateResolves === false) {
+      return {
+        score: 0,
+        inconclusive: true,
+        message: 'Markdown alternate is advertised, but its target is not in the site',
+        findings: [{ file, line: altEl.line ?? headLine, message: `Advertised markdown alternate ${details.domAlternateHref} was not found in the site` }],
+        recommendation: `Publish the Markdown copy at ${details.domAlternateHref}, or fix the href.`,
+        details
+      }
+    }
+
     if (altEl || linkHeader) {
       return {
-        score: 3,
-        inconclusive: true,
-        message: 'Markdown alternate is advertised; content negotiation not found in the repo',
-        findings: [{ file, line: altEl?.line ?? headLine, message: `Markdown alternate advertised, but no "Accept: text/markdown" handling found. ${verifyNote}` }],
-        recommendation: 'Make the host answer "Accept: text/markdown" with Content-Type: text/markdown (Cloudflare "Markdown for Agents", or edge middleware serving the .md file).',
+        score: WEIGHT,
+        message: 'Markdown copy is advertised for agents',
+        findings: [],
+        advice: [{ file, line: altEl?.line ?? headLine, message: `${NEGOTIATION_ADVICE}. ${verifyNote}` }],
+        recommendation: '',
         details
       }
     }
 
     if (mdFile) {
       return {
-        score: 2,
+        score: 1,
         inconclusive: true,
         predicted: true,
         message: 'A .md version exists but is not discoverable',

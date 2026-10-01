@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import check, { parseDirectives } from '../../skills/audit/scripts/checks/crawlability/indexability.mjs'
 import { runCheck, html } from '../helpers.mjs'
+import { noindexIntent } from '../../skills/audit/scripts/lib/noindex.mjs'
 
 const words = n => Array.from({ length: n }, (_, i) => `word${i}`).join(' ')
 const content = `<main><h1>Pin boards</h1><p>${words(250)}</p></main>`
@@ -17,14 +18,52 @@ test('self-referencing canonical and no robots directives scores full', () => {
   assert.equal(r.findings.length, 0)
 })
 
-test('noindex robots meta scores 0', () => {
-  const r = runCheck(check, site('<link rel="canonical" href="/about.html">\n<meta name="robots" content="noindex, follow">'), about)
-  assert.equal(r.score, 0)
-  assert.match(r.findings[0].message, /noindex/)
+const sitemap = paths => ({ 'sitemap.xml': `<?xml version="1.0"?><urlset>${paths.map(p => `<url><loc>https://ex.com${p}</loc></url>`).join('')}</urlset>` })
+
+test('noindex page that is not in the sitemap is kept out of search on purpose: full score, no findings', () => {
+  const r = runCheck(check, site('<link rel="canonical" href="/about.html">\n<meta name="robots" content="noindex, follow">', sitemap(['/'])), about)
+  assert.equal(r.score, 8)
+  assert.equal(r.details.intentionalNoindex, true)
+  assert.equal(r.findings.length, 0)
 })
 
-test('bot-specific noindex meta scores 0', () => {
+test('noindex page with no sitemap at all is also deliberate', () => {
+  assert.equal(runCheck(check, site('<link rel="canonical" href="/about.html">\n<meta name="robots" content="noindex">'), about).score, 8)
+})
+
+test('a noindex for one crawler only is not deliberate exclusion and scores 0', () => {
   assert.equal(runCheck(check, site('<meta name="GPTBot" content="noindex">'), about).score, 0)
+  assert.equal(runCheck(check, site('<link rel="canonical" href="/about.html">', { _headers: '/about\n  X-Robots-Tag: googlebot: noindex\n' }), about).score, 0)
+})
+
+test('an X-Robots-Tag noindex for all crawlers off the sitemap is deliberate', () => {
+  const r = runCheck(check, site('<link rel="canonical" href="/about.html">', { _headers: '/about\n  X-Robots-Tag: noindex\n' }), about)
+  assert.equal(r.score, 8)
+  assert.equal(r.details.intentionalNoindex, true)
+})
+
+test('noindex page listed in the sitemap is a conflict and scores 0', () => {
+  const r = runCheck(check, site('<link rel="canonical" href="/about.html">\n<meta name="robots" content="noindex">', sitemap(['/', '/about'])), about)
+  assert.equal(r.score, 0)
+  assert.match(r.message, /listed in the sitemap/)
+  assert.ok(r.findings.some(f => /listed in the sitemap/.test(f.message)))
+})
+
+test('noindex on the homepage always scores 0', () => {
+  const files = { 'index.html': page('<link rel="canonical" href="/">\n<meta name="robots" content="noindex">'), 'about.html': page('') }
+  const r = runCheck(check, files, { pageFile: 'index.html' })
+  assert.equal(r.score, 0)
+  assert.match(r.message, /Homepage has a noindex/)
+})
+
+test('noindex on the only audited page (single URL mode) is never treated as deliberate', () => {
+  const doc = { querySelectorAll: () => [{ getAttribute: n => (n === 'name' ? 'robots' : 'noindex'), line: 3 }] }
+  const pg = { urlPath: '/blog/post', doc }
+  const fake = { sampleMode: 'single', pages: [pg], sitemaps: [], host: { headersFor: () => ({}) } }
+  const intent = noindexIntent(pg, fake)
+  assert.equal(intent.noindex, true)
+  assert.equal(intent.intentional, false)
+  assert.equal(noindexIntent(pg, { ...fake, sampleMode: 'sample', pages: [pg, pg] }).intentional, true)
 })
 
 test('missing canonical loses 1', () => {
@@ -49,7 +88,8 @@ test('nofollow loses 2', () => {
 })
 
 test('"none" is noindex + nofollow', () => {
-  assert.equal(runCheck(check, site('<meta name="robots" content="none">'), about).score, 0)
+  assert.equal(runCheck(check, site('<meta name="robots" content="none">', sitemap(['/about.html'])), about).score, 0)
+  assert.deepEqual(parseDirectives('none'), { noindex: true, nofollow: true, none: true })
 })
 
 test('max-image-preview:none is not "none" (divergence from extension)', () => {
@@ -90,7 +130,7 @@ test('canonical with an empty href is treated as missing (divergence from extens
 })
 
 test('X-Robots-Tag noindex from _headers scores 0 and is predicted (source substitute)', () => {
-  const r = runCheck(check, site('<link rel="canonical" href="/about.html">', { _headers: '/about\n  X-Robots-Tag: noindex\n' }), about)
+  const r = runCheck(check, site('<link rel="canonical" href="/about.html">', { _headers: '/about\n  X-Robots-Tag: noindex\n', ...sitemap(['/about']) }), about)
   assert.equal(r.score, 0)
   assert.equal(r.predicted, true)
   assert.equal(r.findings[0].file, '_headers')

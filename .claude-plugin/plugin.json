@@ -1,7 +1,7 @@
 {
   "name": "aeotester",
   "displayName": "AEOTester: AI SEO Audit and Fix",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AI SEO audit and auto-fix for websites. Scores AI search visibility (AEO / GEO) with 26 checks, from your site code or a live URL, then adds schema markup, llms.txt, AI crawler rules and meta tags in your code, with a diff before every change.",
   "author": {
     "name": "Ruslan Saifullin",

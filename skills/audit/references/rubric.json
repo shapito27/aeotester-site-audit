@@ -1,7 +1,7 @@
 {
   "$schema": "./rubric.schema.json",
   "name": "AEOTester AEO rubric",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "CC-BY-4.0",
   "attribution": "AEOTester (https://aeotester.com). Reuse requires attribution - see LICENSE-RUBRIC.",
   "source": {
@@ -35,7 +35,10 @@
         "min": 0,
         "label": "Not AEO Ready"
       }
-    ]
+    ],
+    "advisory": "A check with advisory: true is reported as advice and never scored. Its weight is left out of max_score and the category max.",
+    "excluded_pages": "Pages kept out of search on purpose (noindex for all crawlers, not the homepage, not in the sitemap, more than one page audited) are left out of every page check average. Their freshness and author attribution findings are reported as advice. If every page would be excluded, none is.",
+    "advice": "Checks may report advice: findings worth knowing that cost no points."
   },
   "stacks": {
     "static-html": {
@@ -71,13 +74,13 @@
       "detect": "content stored outside the repo (database-backed CMS)"
     }
   },
-  "max_score": 138,
+  "max_score": 133,
   "categories": [
     {
       "id": "ai-access",
       "name": "AI crawler access",
       "description": "Whether AI crawlers are allowed in and told how they may use the content.",
-      "max": 21
+      "max": 18
     },
     {
       "id": "crawlability",
@@ -107,7 +110,7 @@
       "id": "agent-readiness",
       "name": "Agent readiness",
       "description": "Whether an AI agent (not just a search engine) can read and act on the page.",
-      "max": 21
+      "max": 19
     }
   ],
   "checks": [
@@ -400,7 +403,7 @@
         "AI bot list: keys of src/data/robots.json (ai-robots-txt project)"
       ],
       "scoring": {
-        "summary": "Parse Content-Signal lines in robots.txt (served root) and a Content-Signal header from host config for '/' (_headers, vercel.json, netlify.toml). At least one valid key=yes|no pair in either -> 3 (predicted when it comes only from the header). Else, if robots.txt is generated and cannot be read -> 2 inconclusive. Else if robots.txt has a User-agent line naming any AI bot -> 1. Else 0.",
+        "summary": "Advisory in the plugin: reported as advice and never scored (its 3 points are left out of the total). Parse Content-Signal lines in robots.txt (served root) and a Content-Signal header from host config for '/' (_headers, vercel.json, netlify.toml). At least one valid key=yes|no pair in either -> 3 (predicted when it comes only from the header). Else, if robots.txt is generated and cannot be read -> 2 inconclusive. Else if robots.txt has a User-agent line naming any AI bot -> 1. Else 0.",
         "rules": [
           {
             "step": "robots.txt parsing",
@@ -437,7 +440,7 @@
             "points": 0
           }
         ],
-        "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning.",
+        "status_mapping": "Advisory: pass when Content Signals are declared (3), otherwise advice. Never counts toward the score.",
         "inconclusive": "Only when robots.txt is generated and not in the served root and no header signal is configured: 2/3, inconclusive true (the extension's value for its all-unreachable branch)."
       },
       "detect": {
@@ -486,8 +489,14 @@
           "extension": "Reads Content-Signal from the fetched robots.txt and the page response header.",
           "plugin": "URL mode: reads Content-Signal lines from the fetched robots.txt and the real Content-Signal response header of every audited page (first valid one wins, measured, not predicted). When robots.txt is unreachable (0, 401, 403, 429, 503, timeout) and no page sends the header the result is inconclusive at 2/3, not 0. A 404 robots.txt is absent. Generator logic is skipped.",
           "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
+        },
+        {
+          "extension": "Scored out of 3: 0 without a Content-Signal line, 1 when robots.txt names an AI bot.",
+          "plugin": "Advisory: the same detection runs, but the result is advice with no points and the weight is left out of max_score.",
+          "reason": "A missing Content-Signal line places no restriction on AI crawlers and does not affect whether a site is found or cited; full points were also given for ai-train=no. Declaring a policy is a choice, not an AI visibility defect."
         }
-      ]
+      ],
+      "advisory": true
     },
     {
       "id": "crawlability.indexability",
@@ -506,8 +515,14 @@
         "host config X-Robots-Tag for the page path (_headers, vercel.json, netlify.toml via site.host.headersFor)"
       ],
       "scoring": {
-        "summary": "Three sub-checks run first. If any critical issue exists (noindex/none in a robots or *bot* meta tag or in a configured X-Robots-Tag header, a soft 404, or a canonical on a different hostname when the site base URL is known) the score is 0. Otherwise score = 8 minus the canonical penalty (none or no valid href 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0. Directives are whole comma/space-separated tokens. A result that depends on an X-Robots-Tag header is marked predicted.",
+        "summary": "Plugin: a page kept out of search on purpose (noindex for all crawlers, i.e. meta name=robots or an X-Robots-Tag without a user-agent prefix; not the homepage; not listed in a sitemap that was read, following sitemap indexes to their children; more than one page audited) scores full and is left out of every page check average by the engine. Otherwise: Three sub-checks run first. If any critical issue exists (noindex/none in a robots or *bot* meta tag or in a configured X-Robots-Tag header on the homepage, on the only audited page, or on a page listed in the sitemap, a soft 404, or a canonical on a different hostname when the site base URL is known) the score is 0. Otherwise score = 8 minus the canonical penalty (none or no valid href 1, multiple 3, different URL on same host 2, self-referencing 0) minus 2 if any nofollow/none directive exists, floored at 0. Directives are whole comma/space-separated tokens. A result that depends on an X-Robots-Tag header is marked predicted.",
         "rules": [
+          {
+            "condition": "noindex for all crawlers (meta name=robots, or X-Robots-Tag without a user-agent prefix) AND not the homepage AND the page is not in any sitemap read, following sitemap indexes (or there is none) AND more than one page is audited",
+            "points": 8,
+            "status": "pass",
+            "note": "Kept out of search on purpose; the engine excludes the page from all page check averages and lists it in the report."
+          },
           {
             "condition": "canonical: no link[rel=\"canonical\"], or exactly one with an empty/unparseable href",
             "points": "-1",
@@ -536,7 +551,7 @@
             "canonical_status": "warning"
           },
           {
-            "condition": "noindex: any meta[name*=\"bot\" i] (robots, googlebot, GPTBot, ...) or X-Robots-Tag header rule for the page path (also the path without .html) has a directive token 'noindex' or 'none'. Tokens are split on ',' and whitespace; 'max-snippet:', 'max-image-preview:', 'max-video-preview:', 'unavailable_after:' parameters are ignored and a 'ua:' prefix is stripped",
+            "condition": "noindex: any meta[name*=\"bot\" i] (robots, googlebot, GPTBot, ...) or X-Robots-Tag header rule for the page path (also the path without .html) has a directive token 'noindex' or 'none'. Tokens are split on ',' and whitespace; 'max-snippet:', 'max-image-preview:', 'max-video-preview:', 'unavailable_after:' parameters are ignored and a 'ua:' prefix is stripped - only on the homepage, the only audited page, or a page listed in the sitemap (conflict)",
             "status": "fail",
             "points": 0,
             "critical": true,
@@ -585,7 +600,7 @@
       },
       "fixable": "auto",
       "fix_recipe": "fix-recipes/crawlability.indexability.md",
-      "fix_summary": "Emit exactly one self-referencing absolute canonical per page on the production host (Astro layout <link rel=\"canonical\" href={new URL(Astro.url.pathname, Astro.site)}>, Hugo {{ .Permalink }}, Eleventy site.url + page.url, Next.js metadataBase + alternates.canonical), and remove noindex/nofollow/none from production robots meta (Next.js metadata.robots). Soft-404 fixes (thin content, error words in titles) need user content and are assisted.",
+      "fix_summary": "Emit exactly one self-referencing absolute canonical per page on the production host (Astro layout <link rel=\"canonical\" href={new URL(Astro.url.pathname, Astro.site)}>, Hugo {{ .Permalink }}, Eleventy site.url + page.url, Next.js metadataBase + alternates.canonical), and resolve noindex conflicts: noindex on the homepage, or a noindex page listed in the sitemap (remove it from the sitemap if it should stay out of search, or remove noindex). Deliberate noindex on legal and thank-you pages is left alone. Soft-404 fixes (thin content, error words in titles) need user content and are assisted.",
       "stacks": [
         "static-html",
         "astro",
@@ -643,6 +658,11 @@
           "extension": "Reads meta robots from the DOM only.",
           "plugin": "URL mode: X-Robots-Tag comes from the page's real response header, so a noindex there is measured (predicted false) and its finding points at the page URL with no line. No host config file is read for header line numbers.",
           "reason": "Source vs live: URL mode can observe what the repo only predicts."
+        },
+        {
+          "extension": "Any noindex directive is a critical issue scoring 0 on the page being checked.",
+          "plugin": "A page with a noindex for all crawlers that is not the homepage and not in the sitemap is deliberate: full score, and the engine leaves it out of every page check average. noindex scores 0 on the homepage, on the only audited page, when the sitemap lists the page, and when it targets one crawler only (googlebot, GPTBot), which leaves the page visible to others.",
+          "reason": "The plugin averages many pages; legal and thank-you pages kept out of search on purpose were scored as if they should rank, costing points on indexability, schema, meta tags, freshness and author."
         }
       ]
     },
@@ -972,7 +992,7 @@
         "rendered DOM: [typeof], [property], [vocab] elements (RDFa)"
       ],
       "scoring": {
-        "summary": "Page scope, run on every page. If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check scores 0. If no JSON-LD block parses (none present, or all broken) but Microdata/RDFa exists, it is a fixed 4. If every block is broken and there is no Microdata/RDFa, 0. If the only JSON-LD is template-built and unparseable from source, 8 (inconclusive). Otherwise points are summed: base 4 (at least one block parses), FAQ 8 valid / 4 only invalid, each Tier 1 type (HowTo, Product, Organization family) 3 / 1, each Tier 2 type (Article family, VideoObject, Dataset) 2 / 0.5, each Tier 3 type (BreadcrumbList, ItemList, Person) 1 / 0. Total = min(15, Math.round(sum)); if template-built blocks could not be parsed and the total is below 8, it is raised to 8 and marked inconclusive. Every typed node at any depth (including @graph and nested objects) counts; a type is valid when at least one of its nodes validates with lib/schema-validator.mjs. Status comes from the engine (>= 12 pass, >= 8 warning).",
+        "summary": "Page scope, run on every page. If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check scores 0. If no JSON-LD block parses (none present, or all broken) but Microdata/RDFa exists, it is a fixed 4. If every block is broken and there is no Microdata/RDFa, 0. If the only JSON-LD is template-built and unparseable from source, 8 (inconclusive). Otherwise points are summed (plugin scale): base 4 (at least one block parses); main types (HowTo, Product, Organization family, Article family, VideoObject, Dataset): the first valid one 7, each further valid one 2, or 2 once when main types are present but none validates; FAQPage 8 valid / 4 only invalid; each supporting type (BreadcrumbList, ItemList, Person, and WebSite when it has a name or url) 1 if valid. BreadcrumbList is suggested on inner pages, WebSite on the homepage. Total = min(15, Math.round(sum)); if template-built blocks could not be parsed and the total is below 8, it is raised to 8 and marked inconclusive. Every typed node at any depth (including @graph and nested objects) counts; a type is valid when at least one of its nodes validates with lib/schema-validator.mjs. Status comes from the engine (>= 12 pass, >= 8 warning).",
         "rules": [
           {
             "condition": "count(script[type=\"application/ld+json\"]) == 0 AND count([itemscope]) == 0 AND count([typeof]) == 0 AND count([vocab]) == 0",
@@ -995,53 +1015,25 @@
             "points": "+4"
           },
           {
-            "condition": "FAQ: any entity with @type 'FAQPage' (string or inside @type array); valid if SchemaValidator.validateFAQPage passes for at least one",
-            "points": "+8 valid / +4 only invalid / 0 absent"
+            "condition": "main types: @type in HowTo, Product, Organization family (Organization, LocalBusiness, ...), Article family (Article, BlogPosting, NewsArticle, TechArticle), VideoObject, Dataset; a bucket is valid when one of its own nodes validates",
+            "points": "+7 for the first valid main bucket, +2 for each further valid one; +2 once if main buckets are present but none is valid"
           },
           {
-            "condition": "Tier 1 HowTo: @type 'HowTo'",
-            "points": "+3 valid / +1 only invalid"
+            "condition": "FAQ: any entity with @type FAQPage; valid if the validator passes",
+            "points": "+8 valid / +4 only invalid / 0 absent",
+            "note": "A bonus: recommended only when the page shows 2 or more questions (h2-h5, summary or dt text ending in ?)."
           },
           {
-            "condition": "Tier 1 Product: @type 'Product'",
-            "points": "+3 valid / +1 only invalid"
+            "condition": "supporting types: BreadcrumbList, ItemList, Person (nested author objects count), WebSite (plugin: counts when it has a name or url; it has no validator, so structured-data.valid is unchanged)",
+            "points": "+1 each if valid / 0 only invalid"
           },
           {
-            "condition": "Tier 1 Organization: @type in ['Organization','LocalBusiness','Restaurant','Store','MedicalBusiness','LegalService','FinancialService','FoodEstablishment','HealthAndBeautyBusiness','HomeAndConstructionBusiness','EntertainmentBusiness','AutomotiveBusiness','Corporation','GovernmentOrganization','EducationalOrganization','MedicalOrganization','NGO','Airline']. Nested objects count too (e.g. Article.publisher of @type Organization).",
-            "points": "+3 valid / +1 only invalid"
-          },
-          {
-            "condition": "Tier 2 Article: @type in ['Article','BlogPosting','NewsArticle','TechArticle']",
-            "points": "+2 valid / +0.5 only invalid"
-          },
-          {
-            "condition": "Tier 2 VideoObject: @type 'VideoObject'",
-            "points": "+2 valid / +0.5 only invalid"
-          },
-          {
-            "condition": "Tier 2 Dataset: @type 'Dataset'",
-            "points": "+2 valid / +0.5 only invalid"
-          },
-          {
-            "condition": "Tier 3 BreadcrumbList: @type 'BreadcrumbList'",
-            "points": "+1 valid / 0 only invalid"
-          },
-          {
-            "condition": "Tier 3 ItemList: @type 'ItemList'",
-            "points": "+1 valid / 0 only invalid"
-          },
-          {
-            "condition": "Tier 3 Person: @type 'Person' (nested author objects count)",
-            "points": "+1 valid / 0 only invalid"
-          },
-          {
-            "condition": "any other @type (WebPage, WebSite, Question, Answer, ListItem, ImageObject, etc.)",
-            "points": 0,
-            "note": "Categorized as Other; contributes nothing. Matching is exact and case-sensitive after stripping a leading http(s)://schema.org/, so 'schema:FAQPage' does not match."
+            "condition": "any other @type (WebPage, Question, Answer, ListItem, ImageObject, etc.)",
+            "points": 0
           },
           {
             "condition": "total",
-            "points": "min(15, Math.round(base + faq + tier1 + tier2 + tier3))"
+            "points": "min(15, Math.round(base + main + faq + supporting))"
           },
           {
             "condition": "validator FAQPage: mainEntity must be an array (else invalid). Each item: @type === 'Question', has name, has acceptedAnswer with @type === 'Answer' and non-empty text",
@@ -1173,6 +1165,11 @@
           "extension": "Evaluates the single visited URL.",
           "plugin": "Runs on every page; the engine aggregates per-page scores and groups identical findings.",
           "reason": "Source audit covers the whole site."
+        },
+        {
+          "extension": "Tier points: FAQPage 8, HowTo/Product/Organization 3 each, Article/VideoObject/Dataset 2 each, BreadcrumbList/ItemList/Person 1 each; a page without FAQPage tops out around 11 and cannot pass.",
+          "plugin": "The first valid main type earns 7 and each further one 2, so Organization plus BreadcrumbList (inner pages) or Organization plus WebSite (homepage) passes (12). FAQPage stays worth 8 as a bonus and is only recommended on pages that visibly show questions.",
+          "reason": "FAQPage only fits pages with visible Q&A; requiring it everywhere scored down About, Contact and listing pages with complete, valid schema."
         }
       ]
     },
@@ -3172,7 +3169,7 @@
       "extension_key": "markdownForAgents",
       "name": "Markdown for Agents",
       "category": "agent-readiness",
-      "weight": 5,
+      "weight": 3,
       "conditional": false,
       "description": "Checks whether the page offers a Markdown representation to AI agents: via HTTP content negotiation (Accept: text/markdown), an advertised alternate (<link rel=alternate type=text/markdown> or Link header), or an undiscoverable .md sibling file. Markdown gives agents the same content at a fraction of the tokens of HTML.",
       "inputs": [
@@ -3181,7 +3178,7 @@
         "HTTP GET of .md probe URL (1500 ms timeout)"
       ],
       "scoring": {
-        "summary": "Tiered, first match wins: (1) server/edge code or host config in the repo that branches on the Accept header and returns text/markdown -> 5 (predicted); (2) the page has <link rel=alternate type=text/markdown|text/x-markdown> or host config sets a Link header value with both rel=alternate and a markdown type -> 3; (3) a non-HTML .md file for the page exists in the served root -> 2 (predicted); (4) otherwise 0. Every result below 5 is inconclusive: CDN-level negotiation (e.g. Cloudflare Markdown for Agents) cannot be seen in the repo.",
+        "summary": "Plugin scale (weight 3), tiered, first match wins: (1) server/edge code or host config in the repo that branches on the Accept header and returns text/markdown -> 3 (predicted); (2) the page has <link rel=alternate type=text/markdown|text/x-markdown> or host config sets a Link header value with both rel=alternate and a markdown type -> 3, with content negotiation reported as advice; an advertised <link> whose target is not in the site (and no Link header) -> 0, as a measured broken alternate is in URL mode; (3) a non-HTML .md file for the page exists in the served root but is not advertised -> 1 (predicted); (4) otherwise 0 (inconclusive in repo mode: CDN-level negotiation such as Cloudflare Markdown for Agents cannot be seen in the repo). URL mode measures negotiation and fetches the advertised alternates: a working alternate -> 3, negotiation answered -> 3, nothing and HTML for Accept: text/markdown -> 0, a probe that could not be read -> 1 inconclusive.",
         "rules": [
           {
             "condition": "md paths: '/' -> '/index.md'; '/x.html' or '/x.htm' -> '/x.md'; '/dir/' -> '/dir.md' and '/dir/index.md'; other last segment with a dot -> none; else path + '.md'",
@@ -3190,17 +3187,18 @@
           {
             "condition": "a file among middleware.(js|ts), src/middleware.*, _worker.js, worker.js, src/worker.*, src/index.ts, server.(js|mjs|ts), code under functions/, netlify/edge-functions/, middleware/, src/middleware/, workers/, src/workers/, server/, or vercel.json / netlify.toml / nginx.conf / Caddyfile / wrangler.toml contains 'text/markdown' and the word 'accept' (not Accept-*)",
             "status": "pass",
-            "points": 5,
+            "points": 3,
             "predicted": true
           },
           {
             "condition": "page has link[rel~=\"alternate\"][type=\"text/markdown\"] or [type=\"text/x-markdown\"], OR a Link header value configured for the page path (_headers, netlify.toml, vercel.json) that itself has a markdown type and rel alternate",
             "points": 3,
-            "inconclusive": true
+            "inconclusive": true,
+            "note": "Full points. Answering Accept: text/markdown on top is reported as advice. An advertised <link> whose target does not resolve in the site (and no Link header) scores 0 (inconclusive)."
           },
           {
             "condition": "a file at one of the md paths exists in the served root, its body does not start with <!doctype or <html, and host config does not give it an HTML Content-Type",
-            "points": 2,
+            "points": 1,
             "inconclusive": true,
             "predicted": true
           },
@@ -3210,7 +3208,7 @@
             "inconclusive": true
           }
         ],
-        "status_mapping": "5 pass; otherwise inconclusive, so the engine reports warning for 3, 2 and 0.",
+        "status_mapping": "3 pass (negotiation or a working advertised alternate); 1 or 0 fail. Repo-mode 0 is inconclusive.",
         "inconclusive": "Whether the host answers Accept: text/markdown cannot be seen in the repo when it is a CDN setting, so every result below 5 is inconclusive and the finding gives the curl command to verify live. The score still reflects what the repo shows."
       },
       "detect": {
@@ -3225,7 +3223,7 @@
       },
       "fixable": "assisted",
       "fix_recipe": "fix-recipes/agent-readiness.markdown.md",
-      "fix_summary": "Auto-add <link rel=\"alternate\" type=\"text/markdown\" href=\"/page.md\"> to the head template (or Next.js metadata.alternates.types) and a Link header via _headers / netlify.toml / vercel.json, plus generate .md copies of pages at build time; this reaches 3/5. Full 5/5 needs server or edge content negotiation (Cloudflare Markdown for Agents toggle, a Pages/_middleware or Next.js middleware that returns text/markdown for Accept: text/markdown), which the user must enable or approve.",
+      "fix_summary": "Generate .md copies of pages at build time and advertise them with <link rel=\"alternate\" type=\"text/markdown\" href=\"/page.md\"> in the head template (or Next.js metadata.alternates.types) or a Link header via _headers / netlify.toml / vercel.json; this reaches 3/3. Content negotiation for Accept: text/markdown (Cloudflare Markdown for Agents, Pages/_middleware or Next.js middleware) is optional advice.",
       "stacks": [
         "static-html",
         "astro",
@@ -3271,6 +3269,11 @@
           "extension": "Requests the page with Accept: text/markdown and checks for a markdown alternate.",
           "plugin": "URL mode measures: the first 20 pages are fetched again with Accept: text/markdown, and advertised markdown alternates (<link rel=alternate type=text/markdown> or a Link header) are fetched. 5 when the page answers 2xx with Content-Type text/markdown; 3 when negotiation fails but an advertised alternate answers 2xx with non-HTML content; otherwise 0, not inconclusive, because negotiation was tested. An unreachable negotiation request (0, 401, 403, 429, 503, timeout) is inconclusive at half weight, and an advertised alternate that could not be fetched is 3, inconclusive. Pages beyond the 20 probed are judged from their own <link>/Link header (3, inconclusive), else 5 predicted when another probed page negotiated, else half weight inconclusive rather than 0. Repo evidence and .md file lookups are skipped.",
           "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
+        },
+        {
+          "extension": "Weight 5: negotiation 5, advertised alternate 3, undiscoverable .md file 2, nothing 0.",
+          "plugin": "Weight 3: negotiation 3, a working advertised alternate 3 (negotiation becomes advice), an undiscoverable .md file 1, a broken advertised alternate or nothing 0.",
+          "reason": "Few agents send Accept: text/markdown yet; a linked Markdown copy is what agents can actually discover. Markdown for agents is an emerging practice, so it weighs the same as Open Graph rather than more."
         }
       ]
     },

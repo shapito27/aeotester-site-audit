@@ -11,7 +11,7 @@
 | `No Organization schema` (+3) | Add Organization in the shared layout |
 | `<Type> schema is invalid: ...` | Add the missing required fields (valid types score more) |
 
-Points: 4 for any parseable block, then per type (valid / invalid only): FAQPage 8 / 4; HowTo, Product, Organization 3 / 1; Article family, VideoObject, Dataset 2 / 0.5; BreadcrumbList, ItemList, Person 1 / 0. Capped at 15. WebSite scores 0 but is still worth adding. Nested nodes count (an Article's Person author earns Person).
+Points: 4 for any parseable block. Main types (Organization family, Article family, Product, HowTo, VideoObject, Dataset): the first valid one 7, each further valid one 2, or 2 once if none validates. FAQPage 8 valid / 4 invalid, as a bonus. BreadcrumbList, ItemList, Person 1 each if valid, and WebSite 1 when it has a name or url. Capped at 15; 12 passes, so Organization plus BreadcrumbList (inner pages) or Organization plus WebSite (homepage) passes. Nested nodes count (an Article's Person author earns Person). Pages in `excludedPages` (noindex, kept out of search) are not scored: never add schema to them.
 
 ## Where to edit
 
