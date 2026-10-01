@@ -12,7 +12,7 @@
     "rendered DOM: [typeof], [property], [vocab] elements (RDFa)"
   ],
   "scoring": {
-    "summary": "Page scope, run on every page. If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check scores 0. If no JSON-LD block parses (none present, or all broken) but Microdata/RDFa exists, it is a fixed 4. If every block is broken and there is no Microdata/RDFa, 0. If the only JSON-LD is template-built and unparseable from source, 8 (inconclusive). Otherwise points are summed: base 4 (at least one block parses), FAQ 8 valid / 4 only invalid, each Tier 1 type (HowTo, Product, Organization family) 3 / 1, each Tier 2 type (Article family, VideoObject, Dataset) 2 / 0.5, each Tier 3 type (BreadcrumbList, ItemList, Person) 1 / 0. Total = min(15, Math.round(sum)); if template-built blocks could not be parsed and the total is below 8, it is raised to 8 and marked inconclusive. Every typed node at any depth (including @graph and nested objects) counts; a type is valid when at least one of its nodes validates with lib/schema-validator.mjs. Status comes from the engine (>= 12 pass, >= 8 warning).",
+    "summary": "Page scope, run on every page. If there is no JSON-LD script, no [itemscope] and no [typeof]/[vocab] element the check scores 0. If no JSON-LD block parses (none present, or all broken) but Microdata/RDFa exists, it is a fixed 4. If every block is broken and there is no Microdata/RDFa, 0. If the only JSON-LD is template-built and unparseable from source, 8 (inconclusive). Otherwise points are summed (plugin scale): base 4 (at least one block parses); main types (HowTo, Product, Organization family, Article family, VideoObject, Dataset): the first valid one 7, each further valid one 2, or 2 once when main types are present but none validates; FAQPage 8 valid / 4 only invalid; each supporting type (BreadcrumbList, ItemList, Person, and WebSite when it has a name or url) 1 if valid. BreadcrumbList is suggested on inner pages, WebSite on the homepage. Total = min(15, Math.round(sum)); if template-built blocks could not be parsed and the total is below 8, it is raised to 8 and marked inconclusive. Every typed node at any depth (including @graph and nested objects) counts; a type is valid when at least one of its nodes validates with lib/schema-validator.mjs. Status comes from the engine (>= 12 pass, >= 8 warning).",
     "rules": [
       {
         "condition": "count(script[type=\"application/ld+json\"]) == 0 AND count([itemscope]) == 0 AND count([typeof]) == 0 AND count([vocab]) == 0",
@@ -35,53 +35,25 @@
         "points": "+4"
       },
       {
-        "condition": "FAQ: any entity with @type 'FAQPage' (string or inside @type array); valid if SchemaValidator.validateFAQPage passes for at least one",
-        "points": "+8 valid / +4 only invalid / 0 absent"
+        "condition": "main types: @type in HowTo, Product, Organization family (Organization, LocalBusiness, ...), Article family (Article, BlogPosting, NewsArticle, TechArticle), VideoObject, Dataset; a bucket is valid when one of its own nodes validates",
+        "points": "+7 for the first valid main bucket, +2 for each further valid one; +2 once if main buckets are present but none is valid"
       },
       {
-        "condition": "Tier 1 HowTo: @type 'HowTo'",
-        "points": "+3 valid / +1 only invalid"
+        "condition": "FAQ: any entity with @type FAQPage; valid if the validator passes",
+        "points": "+8 valid / +4 only invalid / 0 absent",
+        "note": "A bonus: recommended only when the page shows 2 or more questions (h2-h5, summary or dt text ending in ?)."
       },
       {
-        "condition": "Tier 1 Product: @type 'Product'",
-        "points": "+3 valid / +1 only invalid"
+        "condition": "supporting types: BreadcrumbList, ItemList, Person (nested author objects count), WebSite (plugin: counts when it has a name or url; it has no validator, so structured-data.valid is unchanged)",
+        "points": "+1 each if valid / 0 only invalid"
       },
       {
-        "condition": "Tier 1 Organization: @type in ['Organization','LocalBusiness','Restaurant','Store','MedicalBusiness','LegalService','FinancialService','FoodEstablishment','HealthAndBeautyBusiness','HomeAndConstructionBusiness','EntertainmentBusiness','AutomotiveBusiness','Corporation','GovernmentOrganization','EducationalOrganization','MedicalOrganization','NGO','Airline']. Nested objects count too (e.g. Article.publisher of @type Organization).",
-        "points": "+3 valid / +1 only invalid"
-      },
-      {
-        "condition": "Tier 2 Article: @type in ['Article','BlogPosting','NewsArticle','TechArticle']",
-        "points": "+2 valid / +0.5 only invalid"
-      },
-      {
-        "condition": "Tier 2 VideoObject: @type 'VideoObject'",
-        "points": "+2 valid / +0.5 only invalid"
-      },
-      {
-        "condition": "Tier 2 Dataset: @type 'Dataset'",
-        "points": "+2 valid / +0.5 only invalid"
-      },
-      {
-        "condition": "Tier 3 BreadcrumbList: @type 'BreadcrumbList'",
-        "points": "+1 valid / 0 only invalid"
-      },
-      {
-        "condition": "Tier 3 ItemList: @type 'ItemList'",
-        "points": "+1 valid / 0 only invalid"
-      },
-      {
-        "condition": "Tier 3 Person: @type 'Person' (nested author objects count)",
-        "points": "+1 valid / 0 only invalid"
-      },
-      {
-        "condition": "any other @type (WebPage, WebSite, Question, Answer, ListItem, ImageObject, etc.)",
-        "points": 0,
-        "note": "Categorized as Other; contributes nothing. Matching is exact and case-sensitive after stripping a leading http(s)://schema.org/, so 'schema:FAQPage' does not match."
+        "condition": "any other @type (WebPage, Question, Answer, ListItem, ImageObject, etc.)",
+        "points": 0
       },
       {
         "condition": "total",
-        "points": "min(15, Math.round(base + faq + tier1 + tier2 + tier3))"
+        "points": "min(15, Math.round(base + main + faq + supporting))"
       },
       {
         "condition": "validator FAQPage: mainEntity must be an array (else invalid). Each item: @type === 'Question', has name, has acceptedAnswer with @type === 'Answer' and non-empty text",
@@ -213,6 +185,11 @@
       "extension": "Evaluates the single visited URL.",
       "plugin": "Runs on every page; the engine aggregates per-page scores and groups identical findings.",
       "reason": "Source audit covers the whole site."
+    },
+    {
+      "extension": "Tier points: FAQPage 8, HowTo/Product/Organization 3 each, Article/VideoObject/Dataset 2 each, BreadcrumbList/ItemList/Person 1 each; a page without FAQPage tops out around 11 and cannot pass.",
+      "plugin": "The first valid main type earns 7 and each further one 2, so Organization plus BreadcrumbList (inner pages) or Organization plus WebSite (homepage) passes (12). FAQPage stays worth 8 as a bonus and is only recommended on pages that visibly show questions.",
+      "reason": "FAQPage only fits pages with visible Q&A; requiring it everywhere scored down About, Contact and listing pages with complete, valid schema."
     }
   ]
 }

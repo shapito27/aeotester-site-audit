@@ -1,5 +1,9 @@
 // ai-access.content-signals - port of the extension's content-signals-checker.js (3 pts)
 //
+// Advisory in the plugin (rubric advisory: true): the engine reports the
+// result as advice and leaves it out of the score. A missing Content-Signal
+// line restricts nothing, so it is not an AI visibility defect.
+//
 // Source equivalents: robots.txt in the served root, and a Content-Signal
 // header from host config (_headers, vercel.json, netlify.toml) for '/'.
 // URL mode: the fetched robots.txt and the real Content-Signal response

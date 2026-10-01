@@ -2,20 +2,45 @@
 
 import { extractJsonLd, resolver } from '../../lib/jsonld.mjs'
 import { validateNodes, ORGANIZATION_TYPES, ARTICLE_TYPES } from '../../lib/schema-validator.mjs'
+import { isHomepage } from '../../lib/noindex.mjs'
 
-// bucket -> [types, points if valid, points if only invalid]
+// bucket -> [types, kind]
+//
+// Plugin divergence from the extension's tier points: a page earns most of the
+// points for one main type that fits it (Organization, Article, Product...),
+// so Organization plus breadcrumbs passes (12). FAQPage is a bonus for pages
+// that actually show questions and answers, not a requirement on every page.
 const BUCKETS = [
-  ['FAQ', ['FAQPage'], 8, 4],
-  ['HowTo', ['HowTo'], 3, 1],
-  ['Product', ['Product'], 3, 1],
-  ['Organization', ORGANIZATION_TYPES, 3, 1],
-  ['Article', ARTICLE_TYPES, 2, 0.5],
-  ['VideoObject', ['VideoObject'], 2, 0.5],
-  ['Dataset', ['Dataset'], 2, 0.5],
-  ['BreadcrumbList', ['BreadcrumbList'], 1, 0],
-  ['ItemList', ['ItemList'], 1, 0],
-  ['Person', ['Person'], 1, 0]
+  ['FAQ', ['FAQPage'], 'faq'],
+  ['HowTo', ['HowTo'], 'main'],
+  ['Product', ['Product'], 'main'],
+  ['Organization', ORGANIZATION_TYPES, 'main'],
+  ['Article', ARTICLE_TYPES, 'main'],
+  ['VideoObject', ['VideoObject'], 'main'],
+  ['Dataset', ['Dataset'], 'main'],
+  ['BreadcrumbList', ['BreadcrumbList'], 'support'],
+  ['ItemList', ['ItemList'], 'support'],
+  ['Person', ['Person'], 'support'],
+  // Plugin addition: the standard homepage pairing is Organization + WebSite,
+  // where breadcrumbs make no sense. No validator exists for WebSite, so it
+  // counts when it names the site (name or url); structured-data.valid is
+  // unchanged.
+  ['WebSite', ['WebSite'], 'support']
 ]
+const POINTS = {
+  base: 4, // at least one JSON-LD block parses
+  firstMain: 7, // the first valid main type
+  extraMain: 2, // each further valid main type
+  invalidMain: 2, // main types present, none valid (once)
+  faq: 8, // valid FAQPage
+  invalidFaq: 4,
+  support: 1 // each valid supporting type
+}
+
+// Questions the visitor can see: headings, <summary> and <dt> ending in "?"
+export function visibleQuestions(doc) {
+  return doc.querySelectorAll('h2, h3, h4, h5, summary, dt').filter(el => /\?\s*$/.test(el.textContent.trim())).length
+}
 
 function microdataTypes(doc) {
   const els = doc.querySelectorAll('[itemscope]')
@@ -94,26 +119,36 @@ export default {
     }
 
     const results = validateNodes(nodes, resolver(nodes))
-    let score = 4
+    let score = POINTS.base
+    let validMain = 0
+    let invalidMain = 0
     const breakdown = {}
     const found = []
     const findings = [...brokenFindings]
-    for (const [bucket, types, validPts, invalidPts] of BUCKETS) {
+    for (const [bucket, types, kind] of BUCKETS) {
       const entries = results.filter(r => types.includes(r.type))
       if (entries.length === 0) continue
       const own = entries.filter(r => !r.reference)
-      const validCount = own.filter(r => r.validation?.valid === true).length
+      const isValid = r => (bucket === 'WebSite' ? !!(r.node?.name || r.node?.url) : r.validation?.valid === true)
+      const validCount = own.filter(isValid).length
       const valid = validCount > 0
-      breakdown[bucket] = { count: own.length || entries.length, valid: validCount, points: valid ? validPts : invalidPts }
-      score += valid ? validPts : invalidPts
+      let points = 0
+      if (kind === 'faq') points = valid ? POINTS.faq : POINTS.invalidFaq
+      else if (kind === 'support') points = valid ? POINTS.support : 0
+      else if (valid) points = validMain++ === 0 ? POINTS.firstMain : POINTS.extraMain
+      else invalidMain++
+      breakdown[bucket] = { count: own.length || entries.length, valid: validCount, points }
+      score += points
       const n = own.length || entries.length
       const word = n === 1 ? 'schema' : 'schemas'
       found.push(validCount === n ? `${n} ${bucket} ${word} (valid)` : validCount === 0 ? `${n} ${bucket} ${word} (invalid)` : `${n} ${bucket} ${word} (${validCount} valid, ${n - validCount} invalid)`)
       if (!valid) {
         const bad = own.find(r => r.validation?.valid === false)
+        if (!bad && bucket === 'WebSite') findings.push({ file, line: own[0]?.line ?? null, message: 'WebSite schema has no name or url' })
         if (bad) findings.push({ file, line: bad.line, message: `${bucket} schema is invalid: ${bad.validation.issues.slice(0, 2).join('; ')}` })
       }
     }
+    if (!validMain && invalidMain) score += POINTS.invalidMain
     score = Math.min(15, Math.round(score))
 
     // Blocks we could not parse from source might hold more types
@@ -125,10 +160,16 @@ export default {
     }
 
     const recs = []
-    if (!breakdown.FAQ) recs.push('Add FAQPage schema where the page has visible Q&A (+8 pts)')
-    if (!breakdown.Organization) {
-      recs.push('Add Organization schema (+3 pts)')
-      if (score < 15) findings.push({ file, line: parsed[0].line, message: 'No Organization schema' })
+    const questions = visibleQuestions(doc)
+    if (!validMain) {
+      recs.push(invalidMain ? 'Fix the main schema type so it validates (+5 pts)' : 'Add Organization schema, plus Article on posts or Product on product pages (+7 pts)')
+      if (!invalidMain) findings.push({ file, line: parsed[0].line, message: 'No main schema type (Organization, Article, Product, HowTo, VideoObject or Dataset)' })
+    }
+    if (!breakdown.FAQ && questions >= 2) recs.push(`The page shows ${questions} questions: add FAQPage schema with the same questions and answers (+8 pts)`)
+    const home = isHomepage(page)
+    if (validMain && score < 15) {
+      if (home && !breakdown.WebSite) recs.push('Add WebSite schema with the site name and url (+1 pt)')
+      if (!home && !breakdown.BreadcrumbList) recs.push('Add BreadcrumbList schema (+1 pt)')
     }
     for (const [bucket] of BUCKETS) {
       const b = breakdown[bucket]
@@ -146,7 +187,7 @@ export default {
       message: found.length ? `Found: ${found.join(', ')}` : `${blocks.length} JSON-LD block${blocks.length !== 1 ? 's' : ''}, no recognized schemas`,
       findings,
       recommendation: score < 15 ? recs.slice(0, 3).join('; ') : '',
-      details: { ...base, breakdown, foundTypes: found, otherTypes: [...new Set(results.filter(r => !BUCKETS.some(x => x[1].includes(r.type))).map(r => r.type))] }
+      details: { ...base, breakdown, visibleQuestions: questions, foundTypes: found, otherTypes: [...new Set(results.filter(r => !BUCKETS.some(x => x[1].includes(r.type))).map(r => r.type))] }
     }
   }
 }

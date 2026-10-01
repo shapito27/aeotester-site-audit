@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - Unreleased
+
+Rubric v1.2.0: scoring changes for sites audited across many pages. Each change is recorded as a plugin divergence in the check's `divergences` list; the extension is unchanged.
+
+### Changed
+
+- Pages kept out of search on purpose (`noindex` for all crawlers, not the homepage, not in the sitemap, more than one page audited) are left out of every page check average and listed in the report as "Not scored". Their missing dates and author attribution are reported as advice. Sitemap indexes are followed to their child sitemaps. A noindex for one crawler only (googlebot, GPTBot) is still scored.
+- Indexability: deliberate noindex scores full. noindex is still critical on the homepage, on the only audited page, and on a page the sitemap lists (a new conflict finding).
+- Content Signals is advisory: reported under "Advice (no points)" and left out of the total. A missing `Content-Signal` line places no restriction on AI crawlers. Max score is now 133.
+- Structured data: the first valid main type (Organization, Article, Product, HowTo, VideoObject, Dataset) earns 7 and each further one 2, so Organization plus BreadcrumbList on inner pages, or Organization plus WebSite on the homepage, passes. WebSite now counts as a supporting type. FAQPage stays worth 8 as a bonus and is only recommended on pages that show two or more questions.
+- Markdown for agents is worth 3 instead of 5. A working Markdown copy the page links to earns full points; answering `Accept: text/markdown` on top is advice. An unlinked `.md` file earns 1; an advertised alternate whose target is missing earns 0, as it does in URL mode.
+
+### Added
+
+- The report has an "Advice (no points)" section and lists excluded pages in the summary. The JSON output has `excludedPages`, and each check has `advice` and `excludedPages`.
+- Rubric checks can be `advisory: true`; their weight is left out of `max_score` and the category max.
+
 ## [0.2.0] - Unreleased
 
 ### Added

@@ -1,7 +1,8 @@
 // crawlability.indexability - port of the extension's indexability-checker.js (8 pts)
 
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { robotsDirectives, noindexIntent } from '../../lib/noindex.mjs'
+
+export { parseDirectives } from '../../lib/noindex.mjs'
 
 const MAIN = 'main, article, [role="main"], .content, #content'
 const NON_CONTENT = new Set(['nav', 'footer', 'header', 'aside'])
@@ -11,29 +12,11 @@ const HIDDEN = new Set(['script', 'style', 'template', 'noscript', 'head', 'titl
 const NUM_404 = /(?<![\w-])404(?![\w-])/
 const TITLE_404 = [NUM_404, /not found/, /page not found/, /\berror\b/, /no encontrado/, /nicht gefunden/]
 const BODY_404 = [/page not found/, NUM_404]
-const PARAMS = new Set(['max-snippet', 'max-image-preview', 'max-video-preview', 'unavailable_after'])
 
 // Extension's normalizeUrl: protocol//hostname + pathname + search, one trailing
 // slash stripped, lowercased.
 function normalizeUrl(u) {
   return `${u.protocol}//${u.hostname}${u.pathname}${u.search}`.replace(/\/$/, '').toLowerCase()
-}
-
-// Divergence: directives are matched as whole comma/space separated tokens, so
-// "max-image-preview:none" is not read as "none". A "googlebot: noindex" style
-// user-agent prefix (X-Robots-Tag) is stripped.
-export function parseDirectives(value) {
-  const out = new Set()
-  for (const part of String(value || '').toLowerCase().split(',')) {
-    let p = part.trim()
-    const m = /^([\w.-]+)\s*:\s*(.*)$/.exec(p)
-    if (m) {
-      if (PARAMS.has(m[1])) continue
-      p = m[2]
-    }
-    for (const token of p.split(/\s+/)) if (token) out.add(token)
-  }
-  return { noindex: out.has('noindex') || out.has('none'), nofollow: out.has('nofollow') || out.has('none'), none: out.has('none') }
 }
 
 function textWithout(root, skip) {
@@ -55,19 +38,6 @@ function textWithout(root, skip) {
 
 function countWords(text) {
   return text.trim().split(/\s+/).filter(Boolean).length
-}
-
-function headerLine(site, source, value) {
-  // URL mode: the header came from a live response, there is no file
-  if (site.live || source === 'HTTP response') return null
-  try {
-    const lines = readFileSync(join(site.root, source), 'utf8').split(/\r?\n/)
-    const i = lines.findIndex(l => /x-robots-tag/i.test(l) && l.includes(value))
-    const j = i === -1 ? lines.findIndex(l => l.includes(value)) : i
-    return j === -1 ? null : j + 1
-  } catch {
-    return null
-  }
 }
 
 function checkCanonical(page, helpers) {
@@ -116,30 +86,6 @@ function checkCanonical(page, helpers) {
   return { status: 'warning', penalty: 2, message: 'Canonical points to a different URL (this page may not be indexed)', canonical: canonical.href, current: page.url, line: el.line, hostCompared }
 }
 
-function checkRobots(page, site) {
-  const issues = []
-  // meta[name*="bot" i] also covers name="robots"
-  for (const meta of page.doc.querySelectorAll('meta[name*="bot" i]')) {
-    const content = meta.getAttribute('content') || ''
-    const d = parseDirectives(content)
-    if (d.noindex || d.nofollow) issues.push({ type: 'meta', name: meta.getAttribute('name'), directive: content, hasNoindex: d.noindex, hasNofollow: d.nofollow, line: meta.line })
-  }
-  // Divergence: X-Robots-Tag from host config (the extension cannot read headers here)
-  const paths = [page.urlPath]
-  if (/\.html?$/i.test(page.urlPath)) paths.push(page.urlPath.replace(/\.html?$/i, ''))
-  const seen = new Set()
-  for (const p of paths) {
-    for (const h of site.host.headersFor(p)['x-robots-tag'] || []) {
-      const key = `${h.source}\n${h.value}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      const d = parseDirectives(h.value)
-      if (d.noindex || d.nofollow) issues.push({ type: 'header', source: h.source, directive: h.value, hasNoindex: d.noindex, hasNofollow: d.nofollow, line: headerLine(site, h.source, h.value) })
-    }
-  }
-  return { hasNoindex: issues.some(i => i.hasNoindex), hasNofollow: issues.some(i => i.hasNofollow), issues }
-}
-
 function checkSoft404(page) {
   const doc = page.doc
   const signals = []
@@ -161,10 +107,25 @@ export default {
   run({ page, site, helpers }) {
     const file = page.file
     const canonical = checkCanonical(page, helpers)
-    const robots = checkRobots(page, site)
+    const intent = noindexIntent(page, site)
+    const robots = intent.robots
     const soft404 = checkSoft404(page)
     const findings = []
     const recs = []
+
+    // Plugin divergence: a noindex page that is not the homepage and not in
+    // the sitemap is kept out of search on purpose (privacy, terms, thank-you
+    // pages). It is not a defect; the engine also leaves it out of the page
+    // averages of every other check.
+    if (intent.intentional) {
+      return {
+        score: 8,
+        message: `Kept out of search on purpose (${intent.reason})`,
+        findings: [],
+        recommendation: '',
+        details: { intentionalNoindex: true, inSitemap: intent.inSitemap, robots: { hasNoindex: true, hasNofollow: robots.hasNofollow, issues: robots.issues }, pageUrl: page.hasRealUrl ? page.url : null }
+      }
+    }
 
     for (const i of robots.issues) {
       const what = i.hasNoindex ? (i.hasNofollow ? 'noindex, nofollow' : 'noindex') : 'nofollow'
@@ -186,13 +147,18 @@ export default {
     const details = {
       canonical: { status: canonical.status, message: canonical.message, canonical: canonical.canonical ?? null, urls: canonical.urls, penalty: canonical.penalty, hostCompared: canonical.hostCompared ?? null },
       robots: { hasNoindex: robots.hasNoindex, hasNofollow: robots.hasNofollow, issues: robots.issues },
+      noindex: { homepage: intent.homepage, inSitemap: intent.inSitemap, single: intent.single },
       soft404,
       pageUrl: page.hasRealUrl ? page.url : null
     }
 
     const critical = []
-    if (robots.hasNoindex) {
-      critical.push('Page has a noindex directive')
+    if (robots.hasNoindex && intent.inSitemap && !intent.homepage && !intent.single) {
+      critical.push('Page has a noindex directive but is listed in the sitemap')
+      findings.push({ file, line: null, message: 'noindex page is listed in the sitemap: the sitemap asks engines to index it, the page tells them not to' })
+      recs.push('Remove this page from the sitemap if it should stay out of search, or remove noindex if it should be found')
+    } else if (robots.hasNoindex) {
+      critical.push(intent.homepage ? 'Homepage has a noindex directive' : 'Page has a noindex directive')
       recs.push(headerOnly ? (site.live ? 'Remove noindex from the X-Robots-Tag response header for this path' : 'Remove noindex from the X-Robots-Tag header rule for this path') : 'Remove noindex / none from the robots meta tag in production')
     }
     if (soft404.isSoft404) {

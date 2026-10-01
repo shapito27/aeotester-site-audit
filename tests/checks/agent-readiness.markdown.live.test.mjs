@@ -10,16 +10,18 @@ const wantsMd = req => /^text\/markdown/.test(req.headers.accept || '')
 
 test('live negotiation answering text/markdown scores full, measured', async () => {
   const r = await runLiveCheck(check, { '/': req => (wantsMd(req) ? md : page()) })
-  assert.equal(r.score, 5)
+  assert.equal(r.score, 3)
   assert.ok(!r.predicted)
   assert.ok(!r.inconclusive)
   assert.equal(r.details.negotiation, 'yes')
 })
 
-test('live <link> alternate that resolves scores 3 when negotiation fails', async () => {
+test('plugin: live <link> alternate that works earns full points; failed negotiation is advice', async () => {
   const r = await runLiveCheck(check, { '/': page(ALT), '/index.md': md })
   assert.equal(r.score, 3)
   assert.ok(!r.inconclusive)
+  assert.equal(r.findings.length, 0)
+  assert.match(r.advice[0].message, /Optional: also answer.*got text\/html/)
   assert.equal(r.details.negotiation, 'no')
   assert.equal(r.details.alternates[0].works, true)
 })
@@ -46,14 +48,14 @@ test('live: an advertised alternate that 404s is a measured 0 with a finding', a
 
 test('live markdown probe 403 is inconclusive', async () => {
   const r = await runLiveCheck(check, { '/': req => (wantsMd(req) ? { status: 403, body: 'no' } : page()) })
-  assert.equal(r.score, 2)
+  assert.equal(r.score, 1)
   assert.equal(r.inconclusive, true)
   assert.equal(r.details.negotiation, 'unreachable')
 })
 
 test('live page beyond the probe limit with nothing advertised is inconclusive, not 0', async () => {
   const r = await runLiveCheck(check, { '/': page() }, { patch: site => site.live.markdown.clear() })
-  assert.equal(r.score, 2)
+  assert.equal(r.score, 1)
   assert.equal(r.inconclusive, true)
   assert.equal(r.details.probed, false)
 })
@@ -61,5 +63,6 @@ test('live page beyond the probe limit with nothing advertised is inconclusive, 
 test('live page beyond the probe limit with a working alternate scores 3', async () => {
   const r = await runLiveCheck(check, { '/': page(ALT), '/index.md': md }, { patch: site => site.live.markdown.clear() })
   assert.equal(r.score, 3)
-  assert.equal(r.inconclusive, true)
+  assert.ok(!r.inconclusive)
+  assert.equal(r.advice.length, 0)
 })

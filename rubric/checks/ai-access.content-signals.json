@@ -13,7 +13,7 @@
     "AI bot list: keys of src/data/robots.json (ai-robots-txt project)"
   ],
   "scoring": {
-    "summary": "Parse Content-Signal lines in robots.txt (served root) and a Content-Signal header from host config for '/' (_headers, vercel.json, netlify.toml). At least one valid key=yes|no pair in either -> 3 (predicted when it comes only from the header). Else, if robots.txt is generated and cannot be read -> 2 inconclusive. Else if robots.txt has a User-agent line naming any AI bot -> 1. Else 0.",
+    "summary": "Advisory in the plugin: reported as advice and never scored (its 3 points are left out of the total). Parse Content-Signal lines in robots.txt (served root) and a Content-Signal header from host config for '/' (_headers, vercel.json, netlify.toml). At least one valid key=yes|no pair in either -> 3 (predicted when it comes only from the header). Else, if robots.txt is generated and cannot be read -> 2 inconclusive. Else if robots.txt has a User-agent line naming any AI bot -> 1. Else 0.",
     "rules": [
       {
         "step": "robots.txt parsing",
@@ -50,7 +50,7 @@
         "points": 0
       }
     ],
-    "status_mapping": "Derived by the engine from the integer score: >= 80% pass, >= 50% warning, else fail; inconclusive results are always a warning.",
+    "status_mapping": "Advisory: pass when Content Signals are declared (3), otherwise advice. Never counts toward the score.",
     "inconclusive": "Only when robots.txt is generated and not in the served root and no header signal is configured: 2/3, inconclusive true (the extension's value for its all-unreachable branch)."
   },
   "detect": {
@@ -99,6 +99,12 @@
       "extension": "Reads Content-Signal from the fetched robots.txt and the page response header.",
       "plugin": "URL mode: reads Content-Signal lines from the fetched robots.txt and the real Content-Signal response header of every audited page (first valid one wins, measured, not predicted). When robots.txt is unreachable (0, 401, 403, 429, 503, timeout) and no page sends the header the result is inconclusive at 2/3, not 0. A 404 robots.txt is absent. Generator logic is skipped.",
       "reason": "Unreachable-vs-absent rule in the project CLAUDE.md; URL mode measures instead of predicting."
+    },
+    {
+      "extension": "Scored out of 3: 0 without a Content-Signal line, 1 when robots.txt names an AI bot.",
+      "plugin": "Advisory: the same detection runs, but the result is advice with no points and the weight is left out of max_score.",
+      "reason": "A missing Content-Signal line places no restriction on AI crawlers and does not affect whether a site is found or cited; full points were also given for ai-train=no. Declaring a policy is a choice, not an AI visibility defect."
     }
-  ]
+  ],
+  "advisory": true
 }

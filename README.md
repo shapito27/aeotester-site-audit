@@ -5,7 +5,7 @@ AEOTester checks whether AI search engines can find, read and cite your website,
 It is built for developers and site owners who want their pages to show up in ChatGPT, Perplexity, Claude, Gemini and Google AI Overviews answers, and who would rather fix the source than paste suggestions from a report.
 
 ```
-/aeotester:audit                     ->  audit the site code in this repo: score out of 138, file:line for every issue
+/aeotester:audit                     ->  audit the site code in this repo: score out of 133, file:line for every issue
 /aeotester:audit https://site.com    ->  audit the live site, one page per template
 /aeotester:fix                       ->  diffs for the fixes, applied after you approve, then a re-audit
 ```
@@ -47,20 +47,28 @@ On the sample site in [`tests/fixtures/sample-site`](tests/fixtures/sample-site)
 | Before | **71 / 132** (54%, Not AEO Ready) |
 | After `/aeotester:fix --yes` | **100 / 132** (76%, Needs Work) |
 
+Measured with rubric v1.1.0. Rubric v1.2.0 scores out of 127 on this site (Content Signals became advice); the same before state scores **72 / 127** (57%).
+
 The fix run added Organization and WebSite JSON-LD, an llms.txt, titles, descriptions, canonical, Open Graph and Twitter tags, `lang` and viewport, `<main>` and `<nav>`, and repaired the heading hierarchy. It left the robots.txt policy (which AI bots to allow, Content-Signal values) for the owner to decide, and listed the items that need real content: author credentials, publish dates, alt text. Scores can differ between runs because titles and descriptions are written by Claude.
 
 ## What it checks
 
 | Category | Points | Examples |
 |---|---:|---|
-| AI crawler access | 21 | robots.txt rules for GPTBot, ClaudeBot, PerplexityBot and 120+ other AI bots, llms.txt, Content Signals |
-| Crawlability and indexing | 18 | canonical, noindex, soft 404s, sitemap, HTTPS, real 404s, X-Robots-Tag |
-| Structured data | 20 | JSON-LD presence and Schema.org validation (Organization, Article, FAQPage, Product, BreadcrumbList...) |
+| AI crawler access | 18 | robots.txt rules for GPTBot, ClaudeBot, PerplexityBot and 120+ other AI bots, llms.txt; Content Signals as advice (not scored) |
+| Crawlability and indexing | 18 | canonical, noindex conflicts (homepage, or a noindex page in the sitemap), soft 404s, sitemap, HTTPS, real 404s, X-Robots-Tag |
+| Structured data | 20 | JSON-LD presence and Schema.org validation: a main type that fits the page (Organization, Article, Product...), breadcrumbs, and FAQPage where the page shows questions |
 | Meta and social tags | 22 | title, description, Open Graph, Twitter cards, `lang`, viewport |
 | Content structure and quality | 36 | heading hierarchy, content depth, freshness dates, author signals, alt text, internal links, landmarks |
-| Agent readiness | 21 | server-rendered content, Markdown for agents, agent-usable controls, `/.well-known/` agent protocols (only scored when the site has an API) |
+| Agent readiness | 19 | server-rendered content, a linked Markdown copy for agents, agent-usable controls, `/.well-known/` agent protocols (only scored when the site has an API) |
 
 The full rubric, with the exact scoring rules for every check, is in [`skills/audit/references/rubric.json`](skills/audit/references/rubric.json). It is the same checklist the AEOTester extension uses, with the differences listed per check under `divergences`.
+
+Because the plugin scores many pages instead of one, it treats a few things differently from the extension:
+
+- **Pages kept out of search on purpose are not scored.** A page with `noindex` for all crawlers that is not the homepage and not in the sitemap (privacy policy, terms, thank-you pages) is left out of every page check, and the report lists it. noindex still costs points on the homepage, or on a page the sitemap asks engines to index.
+- **Advice costs no points.** Things that can be deliberate choices are listed under "Advice" in the report: Content Signals in robots.txt, answering `Accept: text/markdown` when a Markdown copy is already linked, and dates or authors on pages kept out of search.
+- **FAQPage is a bonus.** A page passes structured data with a main type that fits it plus breadcrumbs; FAQPage is suggested only where the page shows questions.
 
 ## Supported stacks
 

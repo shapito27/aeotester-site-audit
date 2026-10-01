@@ -22,9 +22,9 @@ test('sample static site gets a full scored report', () => {
   assert.equal(json.site.mode, 'full')
   assert.equal(json.checks.length, 26)
   assert.equal(json.checks.filter(c => c.status === 'skipped').length, 0)
-  assert.equal(json.available, 132) // agent protocols is n/a
+  assert.equal(json.available, 127) // 133, agent protocols n/a; content signals is advice, never scored
   assert.ok(json.total > 50 && json.total < 100, `unexpected total ${json.total}`)
-  assert.match(report, /\*\*Score: \d+ \/ 132/)
+  assert.match(report, /\*\*Score: \d+ \/ 127/)
   assert.match(report, /Check a live URL: https:\/\/aeotester\.com\/\?utm_source=plugin&utm_medium=report/)
   assert.match(report, /`index\.html:\d+`/)
 })

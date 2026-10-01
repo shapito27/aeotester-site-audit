@@ -31,7 +31,7 @@ Check `node --version` (Node 18+ needed). Then run:
 node ${CLAUDE_PLUGIN_ROOT}/skills/audit/scripts/audit.mjs . --no-report --json -
 ```
 
-Note the score as `total / available` (for example 71/132): `available` already leaves out checks that do not apply. Read `site.mode` and `site.stack.id`:
+Note the score as `total / available` (for example 71/127): `available` already leaves out checks that do not apply. Read `site.mode` and `site.stack.id`:
 
 - `report-only` (WordPress and other CMSs): stop. Content lives in the database; point the user to the fix list in `aeotester-report.md` (run `/aeotester:audit` first if it is missing). Do not edit files.
 - `needs-build`: ask whether to run the build command from `site.notes`. Only build if they agree, then audit again.
@@ -43,6 +43,8 @@ Note the score as `total / available` (for example 71/132): `available` already 
 - With check ids in the arguments: fix exactly those, auto or assisted.
 - Without: every check where `fixable` is `auto` and `lost` > 0, sorted by points lost. Skip `inconclusive` checks unless the finding is concrete.
 - List assisted checks that lost points at the end, as "needs your input", with the command to run them (`/aeotester:fix content.author`). Do not attempt them unasked.
+- Advice is not a fix list: checks with status `advice` (Content Signals) and `advice` entries cost no points and may be deliberate. Mention them once at the end as optional, with the command to apply one (`/aeotester:fix ai-access.content-signals`). Do not apply them unasked.
+- Never touch pages listed in `excludedPages`: they are kept out of search on purpose and were not scored. Do not remove their noindex or add schema, Open Graph or Twitter tags to them.
 
 ### 3. Gather facts and recipes
 

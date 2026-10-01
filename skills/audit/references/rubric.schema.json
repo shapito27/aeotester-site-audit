@@ -24,6 +24,7 @@
           "id": { "type": "string", "pattern": "^[a-z-]+\\.[a-z0-9.-]+$" },
           "weight": { "type": "integer", "minimum": 1 },
           "conditional": { "type": "boolean" },
+          "advisory": { "type": "boolean", "description": "Reported as advice and never scored: its weight is left out of max_score and the category max." },
           "scoring": {
             "type": "object",
             "required": ["summary", "rules", "status_mapping"]

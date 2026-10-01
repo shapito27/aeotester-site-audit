@@ -14,7 +14,7 @@ graders:
     path: aeotester-report.md
   - type: regex
     name: score-in-summary
-    pattern: "\\d+\\s*/\\s*132"
+    pattern: "\\d+\\s*/\\s*127"
   - type: llm
     name: useful-summary
-    criteria: The reply gives the score out of 132 with a percentage or grade, names the biggest point losses (such as structured data and llms.txt) marked auto-fix or assisted, and points to /aeotester:fix as the next step. It does not paste the whole report.
+    criteria: The reply gives the score out of 127 with a percentage or grade, names the biggest point losses (such as structured data and llms.txt) and says in plain words which ones /aeotester:fix can change and which need the user's input, without bare labels like auto-fix or assisted. Advice items (such as Content Signals) and pages not scored are not counted as points lost. It points to /aeotester:fix as the next step and does not paste the whole report.
