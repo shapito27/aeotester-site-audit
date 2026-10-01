@@ -34,11 +34,19 @@ Audits the site in this repo against the AEOTester rubric and writes `aeotester-
 
 4. **Summarize in chat** in a few lines, not the whole report:
    - the score, percentage and grade,
-   - the three to five issues that lose the most points, each marked auto-fix or assisted,
-   - checks marked "predicted from config" or "inconclusive" that the user should confirm on the live site,
+   - the three to five issues that lose the most points (see "Writing each issue" below),
+   - checks marked "predicted from config" or "inconclusive" that the user should confirm on the live site (see "Live checks" below),
    - the next step: `/aeotester:fix` applies the auto-fixable items, always with a diff and a confirmation first.
 
    Link the report file. Do not paste it.
+
+   **Writing each issue.** Write for someone who has never seen the rubric:
+   - Say what the check looks for and why it matters to AI search or agents, in one plain sentence, before the finding.
+   - Show a short concrete example of what is missing or what the fix adds, such as the exact tag or line. For Content Signals, for example: "`robots.txt` sets rules for GPTBot and ClaudeBot, but has no `Content-Signal:` line. That line tells AI companies whether they may use your pages for search results, as answer input, or for training, for example `Content-Signal: search=yes, ai-input=yes, ai-train=no`."
+   - Never show bare rubric labels such as "auto-fix", "assisted" or "inconclusive". Say what they mean instead: "`/aeotester:fix` can change this for you" (auto-fix), "needs your input, such as dates or copy, so the fix will guide you" (assisted), "can't be confirmed from the files, check the live site" (inconclusive or predicted from config).
+   - Name the affected pages as Markdown links to the page on the live site: the page's canonical URL if it has one, otherwise the base URL plus the served path. Without a known base URL, link the file path instead. List up to 10 pages inline, then say "and N other pages". Get the full list from `--json`, because the printed report shortens it.
+
+   **Live checks.** You make no network calls, so ask the user to run the check and show them how: give the exact command with the `!` prefix (for example `! curl -sI -H "Accept: text/markdown" https://example.com/`) so the output lands in the conversation. Say what a pass looks like (here, `Content-Type: text/markdown` in the response headers), and once they run it, read the output and tell them the result.
 
 ## Reference
 
