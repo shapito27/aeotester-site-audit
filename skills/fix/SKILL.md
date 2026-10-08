@@ -10,6 +10,10 @@ allowed-tools: Read, Glob, Grep, AskUserQuestion, Bash(node --version), Bash(nod
 
 Fixes the problems `/aeotester:audit` found, in the site's source files.
 
+## Other hosts (Codex, ChatGPT)
+
+The commands below start with Claude Code's plugin-root variable. A host that does not substitute it (Codex, ChatGPT) leaves it as literal text: replace that prefix with the absolute path of the plugin root, which is the folder two levels above this SKILL.md and holds `skills/`. Do the same for the skill-folder variable, which is the folder containing this SKILL.md. Write the resolved path into the command; never run it with the variable unexpanded. Slash commands such as `/aeotester:audit` are Claude Code syntax: elsewhere the user asks for this skill by name or mention, and the arguments come from their request. The scripts need Node 18+ and a shell, so the skill only works in a host that can run them.
+
 ## Non-negotiable rules
 
 1. **Diff first, then ask.** Before the first Edit or Write, print every planned change as a unified diff in your reply and get the user's approval. `--yes` in the arguments means the user approved in advance: you skip the question, never the diffs. Print them first, then apply.
@@ -19,7 +23,7 @@ Fixes the problems `/aeotester:audit` found, in the site's source files.
 5. **Policy choices belong to the user:** which AI bots to allow, and the Content-Signal values (search, ai-input, ai-train). Propose a default and ask.
 6. **No network calls.**
 7. **Reference only assets that exist.** An `og:image`, logo or icon URL must point at a file in the repo (check with Glob) or one the page already uses.
-8. **Tools:** read files (recipes included) with Read, find them with Glob and Grep. Use Bash only for the `node` commands below, written exactly as shown (unquoted plugin path) so they match the pre-approved commands. Other shell commands may be denied, and a denied command does not mean `node` is unavailable.
+8. **Tools:** read files (recipes included) with Read, find them with Glob and Grep. Use Bash only for the `node` commands below, written exactly as shown (in Claude Code, an unquoted plugin path) so they match the pre-approved commands. Other shell commands may be denied, and a denied command does not mean `node` is unavailable.
 
 ## Steps
 
@@ -83,7 +87,7 @@ Prepare all changes, then show them in one message, before any Edit or Write:
 
 3. For new files (llms.txt), the full content in a fenced block.
 
-Then ask with AskUserQuestion: **Apply all**, **Let me choose** (then ask per file or per check), or **Cancel**. With `--yes`, skip the question and apply, but only after the diffs are printed.
+Then ask with AskUserQuestion (in a host without that tool, a plain question): **Apply all**, **Let me choose** (then ask per file or per check), or **Cancel**. With `--yes`, skip the question and apply, but only after the diffs are printed.
 
 ### 6. Apply
 

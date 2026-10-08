@@ -1,0 +1,4 @@
+# OpenAI hosts (Codex, ChatGPT): the counterpart of `disable-model-invocation: true` in SKILL.md.
+# The fix skill edits files, so it only runs when the user asks for it by name.
+policy:
+  allow_implicit_invocation: false
