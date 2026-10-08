@@ -51,4 +51,7 @@ test('Codex marketplace lists the same plugin as the Claude marketplace', () => 
 test('fix skill blocks implicit invocation for OpenAI hosts', () => {
   const yaml = readFileSync(new URL('../skills/fix/agents/openai.yaml', import.meta.url), 'utf8')
   assert.match(yaml, /allow_implicit_invocation:\s*false/)
+  // OpenAI rejects an openai.yaml without interface.display_name and interface.short_description
+  assert.match(yaml, /^interface:\s*\n(?:\s+.*\n)*?\s+display_name:\s*\S/m)
+  assert.match(yaml, /^interface:\s*\n(?:\s+.*\n)*?\s+short_description:\s*\S/m)
 })

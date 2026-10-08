@@ -1,4 +1,8 @@
-# OpenAI hosts (Codex, ChatGPT): the counterpart of `disable-model-invocation: true` in SKILL.md.
-# The fix skill edits files, so it only runs when the user asks for it by name.
+# OpenAI hosts (Codex, ChatGPT). `interface` is required whenever this file exists.
+# `policy` is the counterpart of `disable-model-invocation: true` in SKILL.md: the fix
+# skill edits files, so it only runs when the user asks for it by name.
+interface:
+  display_name: "AEOTester Fix"
+  short_description: "Apply AI SEO fixes, with a diff first"
 policy:
   allow_implicit_invocation: false

@@ -37,7 +37,7 @@
         "privacyPolicyURL": "https://github.com/shapito27/aeotester-site-audit/blob/main/SECURITY.md",
         "defaultPrompt": [
           "Audit this site for AI search visibility.",
-          "Audit https://example.com for AEO and GEO.",
+          "Audit my live site for AEO and GEO.",
           "Fix the AI SEO issues in this repo."
         ],
         "composerIcon": "./assets/icon.png",
