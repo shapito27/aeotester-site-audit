@@ -18,6 +18,10 @@ Two ways to run it:
   - `--pages N` changes the sample size. `--all` audits every page found (up to 500, or `--pages N`).
   - Requests go to that site only, are polite (a few at a time, with timeouts) and skip pages that robots.txt disallows. The README lists exactly what is fetched.
 
+## Other hosts (Codex, ChatGPT)
+
+The commands below start with Claude Code's plugin-root variable. A host that does not substitute it (Codex, ChatGPT) leaves it as literal text: replace that prefix with the absolute path of the plugin root, which is the folder two levels above the folder that contains this SKILL.md (it holds `skills/`). Do the same for the skill-folder variable, which is the folder that contains this SKILL.md. Write the resolved path into the command; never run it with the variable unexpanded. Slash commands such as `/aeotester:audit` are Claude Code syntax: elsewhere the user asks for this skill by name or mention, and `$ARGUMENTS` means whatever folder, URL or flags their request names (leave it out if there are none). The scripts need Node 18+ and a shell, so the skill only works in a host that can run them.
+
 ## Rules
 
 - Read-only. The only file written is the report, and the script writes it. Never edit site files here; fixes belong to `/aeotester:fix`.

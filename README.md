@@ -1,6 +1,6 @@
-# AEOTester: AI SEO audit and fix for Claude Code
+# AEOTester: AI SEO audit and fix for Claude Code and Codex
 
-AEOTester checks whether AI search engines can find, read and cite your website, then fixes what it can in your code. It runs inside Claude Code. `/aeotester:audit` scores a site on 26 checks for AI search visibility (answer engine optimization, AEO, and generative engine optimization, GEO), either from the site's code in your repository or from a live URL. `/aeotester:fix` then adds the missing pieces in your code, such as JSON-LD schema markup, an llms.txt file, robots.txt rules for AI crawlers, and title, description and Open Graph tags. Every change is shown as a diff before it is written, and nothing is committed for you.
+AEOTester checks whether AI search engines can find, read and cite your website, then fixes what it can in your code. It runs inside Claude Code, and as a plugin in OpenAI's Codex and the ChatGPT desktop app. `/aeotester:audit` scores a site on 26 checks for AI search visibility (answer engine optimization, AEO, and generative engine optimization, GEO), either from the site's code in your repository or from a live URL. `/aeotester:fix` then adds the missing pieces in your code, such as JSON-LD schema markup, an llms.txt file, robots.txt rules for AI crawlers, and title, description and Open Graph tags. Every change is shown as a diff before it is written, and nothing is committed for you.
 
 It is built for developers and site owners who want their pages to show up in ChatGPT, Perplexity, Claude, Gemini and Google AI Overviews answers, and who would rather fix the source than paste suggestions from a report.
 
@@ -26,7 +26,24 @@ Or inside a Claude Code session:
 /plugin install aeotester@aeotester
 ```
 
-Requires Claude Code and Node 18 or newer. The checks are plain Node scripts with no dependencies, run by Claude Code on your machine, so the plugin is meant for Claude Code rather than chat.
+Requires Claude Code and Node 18 or newer. The checks are plain Node scripts with no dependencies, run by Claude Code on your machine.
+
+### Codex and the ChatGPT desktop app
+
+The repo is also an OpenAI plugin: a portable `plugin.json` at the root, the same `skills/` folder, and a marketplace file at `.agents/plugins/marketplace.json`. OpenAI's local and repo marketplaces are read by the ChatGPT desktop app (including Codex there).
+
+```bash
+codex plugin marketplace add shapito27/aeotester-site-audit
+```
+
+Then open the Plugins Directory in the ChatGPT desktop app, pick the **AEOTester** marketplace and install the plugin. Ask for it by name or mention (`$` in Codex, `@` in ChatGPT Work), for example "audit this site for AI search visibility" or "audit https://example.com". The `/aeotester:audit` and `/aeotester:fix` slash commands are Claude Code syntax; in other hosts you describe the task, and the `fix` skill only runs when you ask for it by name.
+
+Things to know:
+
+- **It needs a host that can run Node.** The skills call local Node 18+ scripts and read or edit files in your project. Codex in the ChatGPT desktop app does this; the Codex CLI and IDE extension are untested. A plain ChatGPT chat has no access to your repository or a shell, so the plugin cannot run there.
+- **No MCP server.** This is a skills-only plugin: there is no hosted service, and nothing is sent anywhere except the GET requests to a site you name in URL mode.
+- **Diff-then-ask is a skill instruction, not a host guarantee.** In Claude Code the file edits also go through its permission prompts. In Codex, keep its approval mode on so edits are confirmed too.
+- **Not yet tested in a live Codex or ChatGPT install.** The manifests follow the [Package your plugin](https://developers.openai.com/plugins/build/plugins) guide. If something fails to load, please open an issue with the host and version.
 
 ## Commands
 

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "aeotester",
+  "version": "0.3.0",
+  "description": "AI SEO audit and auto-fix for websites. Scores AI search visibility (AEO / GEO) with 26 checks, from your site code or a live URL, then adds schema markup, llms.txt, AI crawler rules and meta tags in your code, with a diff before every change.",
+  "author": {
+    "name": "Ruslan Saifullin",
+    "url": "https://x.com/ruslan_dev_ai"
+  },
+  "homepage": "https://aeotester.com/?utm_source=openai-plugin&utm_medium=listing",
+  "repository": "https://github.com/shapito27/aeotester-site-audit",
+  "license": "MIT",
+  "keywords": [
+    "ai-seo",
+    "seo-audit",
+    "geo",
+    "generative-engine-optimization",
+    "aeo",
+    "answer-engine-optimization",
+    "ai-search",
+    "schema-markup",
+    "structured-data",
+    "llms-txt",
+    "ai-crawlers"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "AEOTester",
+        "shortDescription": "AI SEO audit and fix",
+        "longDescription": "Checks whether AI search engines can find, read and cite your website. Scores a site on 26 checks for AI search visibility (AEO and GEO), from the site's code in your repository or from a live URL. Then fixes what it can in your code: JSON-LD schema markup, llms.txt, robots.txt rules for AI crawlers, and title, description and Open Graph tags. Every change is shown as a diff before it is written, and nothing is committed for you. It runs local Node scripts, so it needs an environment that can run Node 18 or newer, such as Codex. URL mode sends GET requests only to the site you name.",
+        "developerName": "Ruslan Saifullin",
+        "category": "Developer Tools",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://aeotester.com/?utm_source=openai-plugin&utm_medium=listing",
+        "supportURL": "https://github.com/shapito27/aeotester-site-audit/issues",
+        "privacyPolicyURL": "https://github.com/shapito27/aeotester-site-audit/blob/main/SECURITY.md",
+        "defaultPrompt": [
+          "Audit this site for AI search visibility.",
+          "Audit my live site for AEO and GEO.",
+          "Fix the AI SEO issues in this repo."
+        ],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      }
+    }
+  }
+}
