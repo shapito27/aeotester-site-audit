@@ -12,11 +12,17 @@ function loc(l) {
   return l.line ? `\`${l.file}:${l.line}\`` : `\`${l.file}\``
 }
 
+// Hosts differ in how a skill is invoked: Claude Code has slash commands, Codex and
+// ChatGPT take the skill name in a request. Name the skill, and show the Claude Code
+// command as the example.
+const FIX_SKILL = 'the AEOTester fix skill (`/aeotester:fix` in Claude Code)'
+const AUDIT_URL_HINT = 'ask your coding agent to audit the live URL (`/aeotester:audit https://your-site.com` in Claude Code)'
+
 export function renderReport(site, audit, options = {}) {
   const L = []
   const date = options.date || new Date().toISOString().slice(0, 10)
   L.push('# AEOTester report', '')
-  L.push(`Generated ${date} by the [AEOTester](https://aeotester.com/?utm_source=plugin&utm_medium=report) Claude Code plugin, rubric v${audit.rubricVersion}.`, '')
+  L.push(`Generated ${date} by the [AEOTester](https://aeotester.com/?utm_source=plugin&utm_medium=report) plugin, rubric v${audit.rubricVersion}.`, '')
 
   L.push('| | |', '|---|---|')
   if (site.live) {
@@ -125,10 +131,10 @@ export function renderReport(site, audit, options = {}) {
   L.push('## Notes', '')
   if (site.live) {
     L.push('- Scores come from the live site as a crawler sees it: the HTML the server sends, before any JavaScript runs. Checks marked "inconclusive" could not be read (blocked, rate limited or timed out) and were not scored down.')
-    L.push('- To fix issues, open the site\'s code in Claude Code and run `/aeotester:fix` there. It shows a diff and asks before writing anything.')
+    L.push(`- To fix issues, open the site's code in your coding agent (Claude Code, Codex) and run ${FIX_SKILL} there. It shows a diff and asks before writing anything.`)
   } else {
-    L.push('- Scores come from the repo, not a live page. Tags injected by JavaScript, headers set by your host, and server behaviour can differ in production; checks marked "predicted from config" or "inconclusive" are the ones to confirm live, for example with `/aeotester:audit https://your-site.com`.')
-    L.push('- Run `/aeotester:fix` to apply the auto-fixable items. It shows a diff and asks before writing anything.')
+    L.push(`- Scores come from the repo, not a live page. Tags injected by JavaScript, headers set by your host, and server behaviour can differ in production; checks marked "predicted from config" or "inconclusive" are the ones to confirm live: ${AUDIT_URL_HINT}.`)
+    L.push(`- Run ${FIX_SKILL} to apply the auto-fixable items. It shows a diff and asks before writing anything.`)
   }
   L.push('')
   footer(L)
@@ -138,7 +144,7 @@ export function renderReport(site, audit, options = {}) {
 // Database-backed CMS: no score, a checklist of what to fix in the CMS instead
 function renderFixList(L, rubric) {
   L.push('## Fix list', '')
-  L.push('This site is built with a database-backed CMS, so the pages are not in the repo and no score is given. Nothing was edited. Work through this list in your CMS (theme, SEO plugin, or hosting settings). For a real score, audit the live site: `/aeotester:audit https://your-site.com`.', '')
+  L.push(`This site is built with a database-backed CMS, so the pages are not in the repo and no score is given. Nothing was edited. Work through this list in your CMS (theme, SEO plugin, or hosting settings). For a real score, ${AUDIT_URL_HINT}.`, '')
   for (const cat of rubric.categories) {
     const checks = rubric.checks.filter(c => c.category === cat.id).sort((a, b) => b.weight - a.weight)
     L.push(`### ${cat.name} (${cat.max} pts)`, '')

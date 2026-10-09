@@ -29,6 +29,19 @@ test('sample static site gets a full scored report', () => {
   assert.match(report, /`index\.html:\d+`/)
 })
 
+test('report text names skills, not one host (Claude Code, Codex, ChatGPT)', () => {
+  for (const name of ['sample-site', 'wordpress-theme']) {
+    const { report } = audit(name)
+    assert.doesNotMatch(report, /Claude Code plugin/, `${name}: report calls itself a Claude Code plugin`)
+    // every slash command is paired with the skill name, so a host without slash commands can follow it
+    for (const line of report.split('\n').filter(l => l.includes('`/aeotester:'))) {
+      assert.match(line, /AEOTester fix skill|audit the live URL/, `${name}: bare slash command: ${line}`)
+      assert.match(line, /in Claude Code\)/, `${name}: slash command not labelled as Claude Code: ${line}`)
+    }
+  }
+  assert.match(audit('sample-site').report, /Run the AEOTester fix skill \(`\/aeotester:fix` in Claude Code\) to apply/)
+})
+
 test('WordPress theme gets a fix list, no score, no edits', () => {
   const dir = join(fixtures, 'wordpress-theme')
   const before = readdirSync(dir).sort()
