@@ -55,3 +55,15 @@ test('fix skill blocks implicit invocation for OpenAI hosts', () => {
   assert.match(yaml, /^interface:\s*\n(?:\s+.*\n)*?\s+display_name:\s*\S/m)
   assert.match(yaml, /^interface:\s*\n(?:\s+.*\n)*?\s+short_description:\s*\S/m)
 })
+
+test('privacy policy is published and covers what OpenAI requires', () => {
+  const policy = readFileSync(new URL('../PRIVACY.md', import.meta.url), 'utf8')
+  const url = portable.extensions['com.openai'].interface.privacyPolicyURL
+  assert.equal(url, 'https://github.com/shapito27/aeotester-site-audit/blob/main/PRIVACY.md')
+  assert.equal(claude.privacyPolicyUrl, url)
+  // categories of personal data, purposes, recipients, retention, user controls
+  for (const heading of [/personal data I collect/i, /and why/i, /categories of recipients/i, /^## 4\. Retention/m, /^## 5\. Your controls/m]) {
+    assert.match(policy, heading)
+  }
+  assert.match(policy, /^Effective \d{4}-\d{2}-\d{2}/m)
+})

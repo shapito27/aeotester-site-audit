@@ -119,7 +119,7 @@ The best of both: audit the live URL to see what crawlers get, then run `/aeotes
 - **Network:** repo mode and `/aeotester:fix` make no network requests. URL mode sends GET requests to the site you named, and only to that site: its pages, robots.txt, llms.txt, llms-full.txt, sitemaps, the `/.well-known/` agent discovery files and `/openapi.json`, one made-up URL to test the 404 response, the `http://` version of the homepage to test the redirect, up to 20 pages again with `Accept: text/markdown`, and any Markdown versions the pages advertise. Requests identify themselves with the user agent `AEOTester-Audit/0.2`, run 4 at a time with a 10-second timeout and one retry, and skip pages that robots.txt disallows. Nothing is sent to aeotester.com or anywhere else. No telemetry.
 - **Git:** never commits, pushes or changes branches.
 
-See [SECURITY.md](SECURITY.md).
+See the [privacy policy](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
 ## Development
 
