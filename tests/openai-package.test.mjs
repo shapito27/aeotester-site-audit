@@ -69,11 +69,16 @@ test('archive entries are safe, unique and within the portal limits', () => {
 test('plugin root is the archive root, with the right files and nothing else', () => {
   assert.ok(files.has('plugin.json'))
   for (const name of files.keys()) {
-    assert.match(name, /^(plugin\.json|assets\/|skills\/|LICENSE|LICENSE-RUBRIC|README\.md|SECURITY\.md)/, `unexpected file: ${name}`)
+    assert.match(name, /^(plugin\.json|assets\/|skills\/|LICENSE|LICENSE-RUBRIC|README\.md|PRIVACY\.md|SECURITY\.md)/, `unexpected file: ${name}`)
     assert.ok(!name.split('/').some(part => part.startsWith('.')), `hidden path: ${name}`)
   }
   // a skills-only upload must not carry MCP or app configuration
   for (const banned of ['mcp.json', '.mcp.json', '.app.json']) assert.ok(!files.has(banned), banned)
+})
+
+test('the privacy policy the listing links to ships in the package', () => {
+  assert.ok(files.has('PRIVACY.md'))
+  assert.match(text('PRIVACY.md'), /^# Privacy policy/m)
 })
 
 test('packaged files are the files in the repo', () => {

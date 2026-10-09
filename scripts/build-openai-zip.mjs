@@ -19,12 +19,13 @@ const INCLUDE = [
   /^plugin\.json$/,
   /^assets\//,
   /^skills\//,
-  /^(LICENSE|LICENSE-RUBRIC|README\.md|SECURITY\.md)$/,
+  /^(LICENSE|LICENSE-RUBRIC|README\.md|PRIVACY\.md|SECURITY\.md)$/,
 ]
 const hidden = (path) => path.split('/').some(part => part.startsWith('.'))
 
 export function packageFiles() {
-  const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean)
+  // tracked files plus new files not yet committed; .gitignore (dist/, node_modules/) still applies
+  const tracked = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean)
   return tracked.filter(p => INCLUDE.some(re => re.test(p)) && !hidden(p)).sort()
 }
 

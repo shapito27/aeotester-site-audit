@@ -34,7 +34,7 @@
         "capabilities": ["Read", "Write"],
         "websiteURL": "https://aeotester.com/?utm_source=openai-plugin&utm_medium=listing",
         "supportURL": "https://github.com/shapito27/aeotester-site-audit/issues",
-        "privacyPolicyURL": "https://github.com/shapito27/aeotester-site-audit/blob/main/SECURITY.md",
+        "privacyPolicyURL": "https://github.com/shapito27/aeotester-site-audit/blob/main/PRIVACY.md",
         "defaultPrompt": [
           "Audit this site for AI search visibility.",
           "Audit my live site for AEO and GEO.",

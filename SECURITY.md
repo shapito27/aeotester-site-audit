@@ -1,5 +1,7 @@
 # Security
 
+For what data the plugin handles and who receives it, see the [privacy policy](PRIVACY.md).
+
 ## What this plugin does with your data
 
 - **Reads and writes only inside the current repo.** It never touches files outside the directory Claude Code is running in. The only file the audit writes is `aeotester-report.md`.
