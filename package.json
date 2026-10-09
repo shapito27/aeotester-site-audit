@@ -2,9 +2,10 @@
   "name": "aeotester-site-audit",
   "private": true,
   "type": "module",
-  "description": "Development scripts for the aeotester Claude Code plugin. The plugin itself has no dependencies.",
+  "description": "Development scripts for the aeotester plugin (Claude Code, Codex, ChatGPT). The plugin itself has no dependencies.",
   "scripts": {
     "test": "node --test \"tests/**/*.test.mjs\"",
+    "build:openai-zip": "node scripts/build-openai-zip.mjs",
     "check": "node scripts/build-rubric.mjs --check && node scripts/validate-rubric.mjs && node scripts/check-no-dashes.mjs && npm test"
   }
 }

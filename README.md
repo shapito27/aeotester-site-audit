@@ -127,10 +127,15 @@ See [SECURITY.md](SECURITY.md).
 claude --plugin-dir ./aeotester-site-audit   # load the plugin for one session (/reload-plugins after edits)
 npm run check                               # rubric build check, rubric validation, no-dash check, unit tests
 claude plugin validate --strict .           # manifest and component validation
+npm run build:openai-zip                   # dist/aeotester-<version>.zip for the OpenAI plugin portal
 claude plugin eval . --scaffold --ablation none --allow-tools "Bash(node:*)" Edit Write   # end-to-end evals (uses your Claude credits)
 ```
 
 Rubric sources live in `rubric/checks/*.json`; `node scripts/build-rubric.mjs` rebuilds `rubric.json`.
+
+### Publishing to OpenAI
+
+`npm run build:openai-zip` writes `dist/aeotester-<version>.zip`: the portable `plugin.json`, the icon, the skills with their scripts and references, and the licence files. The Claude Code manifests, tests and CI files are left out. Upload it at [platform.openai.com/plugins](https://platform.openai.com/plugins) with **Upload new or existing plugin**, using the **Skills only** path (the package has no MCP server). You need a verified developer identity, and every bundled skill goes through OpenAI's safety scan, which can take up to two hours. Each new upload needs a new `version` in `plugin.json` and `.claude-plugin/plugin.json` (`tests/manifests.test.mjs` keeps them equal). `tests/openai-package.test.mjs` checks the ZIP against the portal's documented rules.
 
 ## License
 
