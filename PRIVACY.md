@@ -1,6 +1,6 @@
 # Privacy policy: AEOTester plugin
 
-Effective 2026-10-09. Publisher: Ruslan Saifullin ("I").
+Effective 2026-10-09. Publisher: Ruslan Saifullin ("I"). Published at <https://aeotester.com/privacy/>.
 
 This policy covers the AEOTester plugin (the `audit` and `fix` skills) when you run it in Claude Code, Codex or the ChatGPT desktop app. The AEOTester website and Chrome extension are separate products and are not covered here.
 
@@ -54,4 +54,4 @@ I will update this file in the [repository](https://github.com/shapito27/aeotest
 
 ## 8. Contact
 
-Questions about this policy, or support: [open an issue](https://github.com/shapito27/aeotester-site-audit/issues). Security problems: use GitHub's private vulnerability reporting on the repository (see [SECURITY.md](SECURITY.md)).
+Questions about this policy, or support: [open an issue](https://github.com/shapito27/aeotester-site-audit/issues), or email todd.ads.analysis@gmail.com. Security problems: use GitHub's private vulnerability reporting on the repository (see [SECURITY.md](SECURITY.md)).
